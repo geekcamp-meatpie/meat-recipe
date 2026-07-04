@@ -5,7 +5,9 @@ from pydantic import BaseModel, Field
 from google import genai
 from google.genai import types
 
-app = FastAPI()
+from fastapi import APIRouter
+
+router = APIRouter()
 
 # Geminiクライアントの初期化（環境変数 GEMINI_API_KEY が自動で読み込まれます）
 client = genai.Client()
