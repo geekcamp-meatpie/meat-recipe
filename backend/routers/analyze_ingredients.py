@@ -28,7 +28,7 @@ class IngredientResponse(BaseModel):
 # ==========================================
 # 2. エンドポイントの実装
 # ==========================================
-@app.post("/analyze-ingredients", response_model=List[IngredientDetection])
+@router.post("/analyze-ingredients", response_model=List[IngredientDetection])
 async def analyze_ingredients(file: UploadFile = File(...)):
     # 拡張子の簡易チェック
     if not file.content_type.startswith("image/"):
