@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import recipes, settings
+from routers import ingredients, recipes, settings
 
 app = FastAPI(title="Want Cooking API")
 
@@ -14,6 +14,7 @@ app.add_middleware(
 
 app.include_router(recipes.router, prefix="/api")
 app.include_router(settings.router, prefix="/api")
+app.include_router(ingredients.router, prefix="/api")
 
 
 @app.get("/")
