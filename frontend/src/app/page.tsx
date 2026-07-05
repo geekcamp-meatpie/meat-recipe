@@ -1,5 +1,5 @@
 "use client";
-
+import axios from "axios";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -7,14 +7,16 @@ export default function HomePage() {
   const router = useRouter();
   const [ingredientText, setIngredientText] = useState("");
   const [showTextInput, setShowTextInput] = useState(false);
-
+  const [image, setImage] = useState<File | null>(null);
   const handleSubmit = () => {
     if (!ingredientText.trim()) return;
     const params = new URLSearchParams({ ingredients: ingredientText });
-    router.push(`/confirm?${params.toString()}`);
-  };
-
-  return (
+    router.push(`/confirm?${params.toString()}`);}
+  const handleFileslect = (e: React.ChangeEvent<HTMLInputElement>) => {setImage(e.target.files?.[0] || null);};
+  const handleSubmitImage = async (e: React.MouseEvent<HTMLButtonElement, MouseEvent>) => { 
+         e.preventDefault();
+         async () => { axios.post('localhost:8000//analyze-ingredients', image, { headers: { 'Content-Type': 'multipart/form-data' } }).then(response => {const ingredients = response.data.ingredients})};}
+    return(
     <>
       {/* ヒーロー */}
       <div
@@ -50,9 +52,8 @@ export default function HomePage() {
           {/* 担当B: カメラ撮影機能をここに実装 */}
           <button
             className="flex-1 rounded-2xl p-4 text-center shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-            style={{ background: "var(--color-card)" }}
-            onClick={() => alert("カメラ機能は担当Bが実装予定")}
-          >
+            style={{ background: "var(--color-card)" }}       >
+
             <div
               className="w-12 h-12 rounded-[14px] flex items-center justify-center mx-auto mb-3 text-[22px]"
               style={{ background: "var(--color-icon-bg)" }}
@@ -60,33 +61,32 @@ export default function HomePage() {
               📷
             </div>
             <h3 className="text-xs font-bold mb-1">撮影</h3>
-            <p className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>
+            <a className="text-[10px]" style={{ color: "var(--color-text-muted)" }}   href="/record"  >
               カメラで
               <br />
               撮影する
-            </p>
+            </a>
           </button>
 
           {/* 担当B: アルバム選択機能をここに実装 */}
-          <button
-            className="flex-1 rounded-2xl p-4 text-center shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-            style={{ background: "var(--color-card)" }}
-            onClick={() => alert("写真選択機能は担当Bが実装予定")}
-          >
-            <div
-              className="w-12 h-12 rounded-[14px] flex items-center justify-center mx-auto mb-3 text-[22px]"
-              style={{ background: "var(--color-icon-bg)" }}
-            >
-              🖼️
-            </div>
-            <h3 className="text-xs font-bold mb-1">写真選択</h3>
-            <p className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>
-              アルバムから
-              <br />
-              選ぶ
-            </p>
-          </button>
-
+         \
+           <div className="text-base font-bold mb-3.5" style={{ color: "var(--color-text)" }}>
+            <form>           
+             <div className="w-12 h-12 rounded-[14px] flex items-center justify-center mx-auto mb-3 text-[22px]" style={{ background: "var(--color-icon-bg)" }}>🖼️ </div>
+              <input
+               type="file"
+               accept="image/*"
+               capture="environment"
+               onChange={handleFileslect}
+              />
+              
+            </form>
+            {/* テキスト入力エリア */}
+            <button
+              className="flex-1 rounded-2xl p-4 text-center shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              style={{ background: "var(--color-card)" }}
+              onClick={handleSubmitImage}>送信</button>
+           </div>
           <button
             className="flex-1 rounded-2xl p-4 text-center shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
             style={{ background: "var(--color-card)" }}
@@ -170,7 +170,7 @@ export default function HomePage() {
                   調理時間: {item.time}分 ・ 難易度: {item.stars}
                 </p>
               </div>
-              <span style={{ color: "#ccc" }}>›</span>
+              <span style={{ color: "#ccc" }}></span>
             </div>
           ))}
         </div>
