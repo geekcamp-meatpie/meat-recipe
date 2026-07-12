@@ -2,3 +2,5 @@ __pycache__/
 *.pyc
 .env
 venv/
+/workspaces/python-3/meat-recipe/backend/routers/__pycache__
+/workspaces/python-3/meat-recipe/backend/services/__pycache__
