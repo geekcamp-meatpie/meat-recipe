@@ -9,8 +9,17 @@ from fastapi import APIRouter
 
 router = APIRouter()
 
-# Geminiクライアントの初期化（環境変数 GEMINI_API_KEY が自動で読み込まれます）
-client = genai.Client()
+_client: genai.Client | None = None
+
+
+def _get_client() -> genai.Client:
+    """Geminiクライアントを遅延初期化する（環境変数 GEMINI_API_KEY が自動で読み込まれます）。
+    起動時ではなくリクエスト時に初期化することで、キー未設定でもアプリ自体は起動できるようにする。
+    """
+    global _client
+    if _client is None:
+        _client = genai.Client()
+    return _client
 
 # ==========================================
 # 1. Pydanticでのレスポンススキーマ定義
@@ -48,7 +57,7 @@ async def analyze_ingredients(file: UploadFile = File(...)):
         prompt = "画像に写っている食材をすべて検出し、その名前、量、確信度（confidence）を抽出してください。"
 
         # Gemini APIを呼び出す（Structured OutputsでPydanticの型を強制指定）
-        response = client.models.generate_content(
+        response = _get_client().models.generate_content(
             model='gemini-2.5-flash',
             contents=[image_part, prompt],
             config=types.GenerateContentConfig(
