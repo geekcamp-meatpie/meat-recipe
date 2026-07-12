@@ -15,7 +15,7 @@ export default function HomePage() {
   const handleFileslect = (e: React.ChangeEvent<HTMLInputElement>) => {setImage(e.target.files?.[0] || null);};
   const handleSubmitImage = async (e: React.MouseEvent<HTMLButtonElement, MouseEvent>) => { 
          e.preventDefault();
-         async () => { axios.post('localhost:8000//analyze-ingredients', image, { headers: { 'Content-Type': 'multipart/form-data' } }).then(response => {const ingredients = response.data.ingredients})};}
+        axios.post('http://127.0.0.1:8000/suggest-recipes', image, { headers: { 'Content-Type': 'multipart/form-data' } }).then(response => {const ingredients = response.data.ingredients})};
     return(
     <>
       {/* ヒーロー */}
