@@ -1,25 +1,31 @@
 import json
+import os
 from typing import List
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import UploadFile, File, HTTPException
 from pydantic import BaseModel, Field
 from google import genai
 from google.genai import types
 
 from fastapi import APIRouter
 
-router = APIRouter()
+from config import app_config
 
-_client: genai.Client | None = None
+router = APIRouter()
 
 
 def _get_client() -> genai.Client:
-    """Geminiクライアントを遅延初期化する（環境変数 GEMINI_API_KEY が自動で読み込まれます）。
-    起動時ではなくリクエスト時に初期化することで、キー未設定でもアプリ自体は起動できるようにする。
+    """Geminiクライアントを初期化する。
+    設定画面（/api/settings）で保存されたAPIキーがあればそれを使い、
+    無ければSDKのデフォルト挙動に従い環境変数（GEMINI_API_KEY等）から読み込む。
+    リクエストごとに生成することで、設定画面でのキー変更を即座に反映する。
     """
-    global _client
-    if _client is None:
-        _client = genai.Client()
-    return _client
+    if app_config.api_key:
+        return genai.Client(api_key=app_config.api_key)
+    return genai.Client()
+
+
+def _has_api_key() -> bool:
+    return bool(app_config.api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
 
 # ==========================================
 # 1. Pydanticでのレスポンススキーマ定義
@@ -40,8 +46,11 @@ class IngredientResponse(BaseModel):
 @router.post("/analyze-ingredients", response_model=List[IngredientDetection])
 async def analyze_ingredients(file: UploadFile = File(...)):
     # 拡張子の簡易チェック
-    if not file.content_type.startswith("image/"):
+    if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="アップロードされたファイルは画像ではありません。")
+
+    if not _has_api_key():
+        raise HTTPException(status_code=400, detail="APIキーが設定されていません。設定画面からAPIキーを入力してください。")
 
     try:
         # 画像バイナリを読み込む
@@ -57,7 +66,9 @@ async def analyze_ingredients(file: UploadFile = File(...)):
         prompt = "画像に写っている食材をすべて検出し、その名前、量、確信度（confidence）を抽出してください。"
 
         # Gemini APIを呼び出す（Structured OutputsでPydanticの型を強制指定）
-        response = _get_client().models.generate_content(
+        # 非同期エンドポイント内のため、同期版ではなく非同期版クライアントを使う
+        # (同期版はイベントループ内で呼ぶとhttpxクライアントがクローズ済み扱いになり失敗する)
+        response = await _get_client().aio.models.generate_content(
             model='gemini-2.5-flash',
             contents=[image_part, prompt],
             config=types.GenerateContentConfig(
