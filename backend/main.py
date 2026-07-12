@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import recipes, settings
+from routers import recipes, settings,analyze_ingredients
 
 app = FastAPI(title="Want Cooking API")
 
@@ -14,7 +14,7 @@ app.add_middleware(
 
 app.include_router(recipes.router, prefix="/api")
 app.include_router(settings.router, prefix="/api")
-
+app.include_router(analyze_ingredients.router, prefix="/api")
 
 @app.get("/")
 def health():
