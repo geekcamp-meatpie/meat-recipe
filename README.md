@@ -40,6 +40,11 @@ uvicorn main:app --reload
 ```
 meat-recipe/
 ├── message.html                  ← デザイン原案（参照用）
+├── docs/                         ← トピック別詳細ドキュメント（該当タスク時のみ参照）
+│   ├── recipe-retrieval-strategy.md
+│   ├── recipe-prompt-design.md
+│   ├── image-recognition.md
+│   └── medication-check.md
 ├── frontend/                     ← フロントエンド（Next.js + TypeScript）
 │   └── src/
 │       ├── app/
@@ -67,13 +72,19 @@ meat-recipe/
 └── backend/                      ← バックエンド（FastAPI / Python）
     ├── main.py                   ← FastAPIエントリーポイント（CORS設定等）
     ├── config.py                 ← アプリ設定管理（APIキー・薬情報の保持）
+    ├── conftest.py                ← pytest共通設定
     ├── requirements.txt          ← Python依存パッケージ
     ├── routers/
     │   ├── recipes.py            ← POST /api/suggest-recipes エンドポイント
-    │   └── settings.py           ← GET/POST /api/settings エンドポイント
-    └── services/
-        ├── ai_client.py          ← AI API呼び出し（Gemini/Claude切り替え）
-        └── prompt_builder.py     ← プロンプトテンプレート組み立て
+    │   ├── settings.py           ← GET/POST /api/settings エンドポイント
+    │   └── analyze_ingredients.py ← POST /api/analyze-ingredients エンドポイント（画像→食材）
+    ├── services/
+    │   ├── ai_client.py          ← レシピ提案AI呼び出し（Gemini/Claude切り替え）
+    │   ├── prompt_builder.py     ← レシピ提案用プロンプトテンプレート組み立て
+    │   ├── image_ai_client.py    ← 画像認識AI呼び出し（マルチモーダル、未実装スタブ）
+    │   └── image_prompt_builder.py ← 画像認識用プロンプト組み立て（未実装スタブ）
+    └── tests/
+        └── test_analyze_ingredients.py ← 画像認識エンドポイントのテスト
 ```
 
 ---
@@ -111,12 +122,14 @@ meat-recipe/
 | ファイル | 何をするか |
 |----------|-----------|
 | `frontend/src/app/page.tsx` | ホーム画面の「撮影」「写真選択」カードに実際のカメラ/アルバム機能を接続する |
-| `backend/routers/recipes.py` | 画像付きリクエストを受け取るエンドポイントの拡張（マルチパート対応等） |
-| `backend/services/ai_client.py` | マルチモーダルAPI呼び出しの実装（画像→食材名特定） |
+| `backend/routers/analyze_ingredients.py` | POST /api/analyze-ingredients エンドポイント（画像受け取り→解析依頼） |
+| `backend/services/image_ai_client.py` | マルチモーダルAPI呼び出しの実装（画像→食材名特定、現在未実装スタブ） |
+| `backend/services/image_prompt_builder.py` | 画像認識用プロンプトの設計・チューニング（現在未実装スタブ） |
 
 **現在の状態:**
 - ホーム画面の撮影・写真選択ボタンは `alert()` のプレースホルダーになっている
 - `onClick` ハンドラを実際のカメラAPI呼び出しに差し替える
+- バックエンド側のエンドポイントは実装済みだが、`image_ai_client.py` / `image_prompt_builder.py` は `NotImplementedError` を投げるスタブ状態
 
 ---
 
@@ -140,6 +153,7 @@ meat-recipe/
 | GET | `/api/settings` | 現在の設定を取得 |
 | POST | `/api/settings` | 設定を保存（APIキー・プロバイダー・薬リスト） |
 | POST | `/api/suggest-recipes` | 食材＋設定を受けてAIにレシピ提案を依頼 |
+| POST | `/api/analyze-ingredients` | 画像をアップロードして食材リストを検出 |
 
 ---
 
