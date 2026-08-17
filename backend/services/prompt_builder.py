@@ -51,7 +51,7 @@ def build_prompt(
 - warnings: 配列。各要素は {{ "warningIngredient": "注意が必要な食材名", "warningReason": "注意が必要な理由（1文）" }}
 薬との相互作用がない場合は warnings を空配列にしてください。"""
 
-    prompt = f"""あなたは料理提案AIです。以下の条件でレシピを3つ提案してください。
+    prompt = f"""あなたはプロの料理人です。以下の条件でレシピを3つ提案してください。
 
 【食材】{ingredients}
 {mode_text}
@@ -64,6 +64,7 @@ def build_prompt(
     "recipeName": "料理名",
     "cookingTime": 調理時間（分・数値）,
     "difficulty": "簡単" or "普通" or "本格的",
+    "cookware":"必要な調理器具",
     "ingredients": ["材料1", "材料2", ...],
     "steps": ["手順1", "手順2", ...],
     "point": "美味しく作るコツ（1文）",
