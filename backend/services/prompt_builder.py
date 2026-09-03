@@ -71,7 +71,7 @@ def build_prompt(
 [
   {{
     "recipeName": "料理名",
-    "servings":"〇人分"
+    "servings":"〇人分",
     "cookingTime": 調理時間（分・数値）,
     "difficulty": "簡単" or "普通" or "本格的",
     "cookware":"必要な調理器具",
