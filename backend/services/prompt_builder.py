@@ -3,6 +3,7 @@
 このファイルでプロンプトテンプレートを管理する。
 条件に応じてプロンプトを組み立て、AIに送信する文字列を返す。
 """
+
 import os
 from google import genai
 from google.genai import types
