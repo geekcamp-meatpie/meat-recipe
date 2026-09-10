@@ -1,7 +1,7 @@
 "use client";
 import axios from 'axios';
 import { useEffect } from "react";
-import  FavoriteCard from '../../components/Favoritecard';
+import  FavoriteCard from '../../components/FavoriteCard';
 export default function FavoritesPage() {
   const getFavoritesList = () => {useEffect(() => {async () => { await axios.get("/api/favorites/list").then(response => {return response.data})};}, [])};
 
