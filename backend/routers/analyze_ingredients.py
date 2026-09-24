@@ -22,6 +22,6 @@ async def analyze_image(file: UploadFile = File(...)):
 
     try:
         image_bytes = await file.read()
-        return await analyze_image(image_bytes, file.content_type)
+        return await analyze_image_ai(image_bytes, file.content_type)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"解析中にエラーが発生しました: {str(e)}")

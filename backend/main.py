@@ -18,7 +18,8 @@ app.include_router(recipes.router, prefix="/api")
 app.include_router(settings.router, prefix="/api")
 app.include_router(analyze_ingredients.router, prefix="/api")
 
-
+#起動イベント方式で書いてます。起動処理だけで、終了処理は書く必要がない。
+#なにかしら起動したときに常時接続するものがある場合はlifespan方式で書くのが良い。
 @app.on_event("startup")
 def on_startup():
     """DB接続時は設定テーブルを用意する。DB未接続/接続失敗時はメモリ動作のまま起動を継続する。"""

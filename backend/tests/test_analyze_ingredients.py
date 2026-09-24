@@ -35,7 +35,7 @@ def test_success(monkeypatch):
         return expected
 
     monkeypatch.setattr(analyze_ingredients, "has_api_key", lambda: True)
-    monkeypatch.setattr(analyze_ingredients, "analyze_image", fake_analyze_image)
+    monkeypatch.setattr(analyze_ingredients, "analyze_image_ai", fake_analyze_image)
 
     response = client.post(
         "/api/analyze-ingredients",
@@ -80,7 +80,7 @@ def test_ai_error_returns_500(monkeypatch):
         raise RuntimeError("Gemini APIエラー")
 
     monkeypatch.setattr(analyze_ingredients, "has_api_key", lambda: True)
-    monkeypatch.setattr(analyze_ingredients, "analyze_image", fake_analyze_image)
+    monkeypatch.setattr(analyze_ingredients, "analyze_image_ai", fake_analyze_image)
 
     response = client.post(
         "/api/analyze-ingredients",
