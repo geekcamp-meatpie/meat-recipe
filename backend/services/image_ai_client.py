@@ -39,7 +39,7 @@ def _get_client() -> genai.Client:
     return genai.Client()
 
 
-async def analyze_image(image_bytes: bytes, mime_type: str) -> list[dict]:
+async def analyze_image_ai(image_bytes: bytes, mime_type: str) -> list[dict]:
     """画像バイナリを受け取り、検出した食材のリスト（name, amount, confidence）を返す。"""
     image_part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
     prompt = build_image_prompt()

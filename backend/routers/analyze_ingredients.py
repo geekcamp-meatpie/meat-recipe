@@ -7,7 +7,7 @@ from typing import List
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
 
-from services.image_ai_client import IngredientDetection, analyze_image, has_api_key
+from services.image_ai_client import IngredientDetection, analyze_image_ai, has_api_key
 
 router = APIRouter()
 
