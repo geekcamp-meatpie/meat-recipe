@@ -5,10 +5,17 @@ APIキー取得後にここを実装する。
 """
 
 import json
+import os
+from anthropic import AsyncAnthropic
+from google import genai
+from google.genai import types
+from pydantic import BaseModel, Field
 
 
 async def call_ai(prompt: str, provider: str, api_key: str) -> list[dict]:
     """AIにプロンプトを送信し、レシピのリストを返す。"""
+    if not api_key:
+        return _dummy_recipes()
 
     if provider == "gemini":
         return await _call_gemini(prompt, api_key)
@@ -17,38 +24,48 @@ async def call_ai(prompt: str, provider: str, api_key: str) -> list[dict]:
 
 
 async def _call_gemini(prompt: str, api_key: str) -> list[dict]:
-    """
-    担当D: Gemini API呼び出し
-    google-generativeai ライブラリを使って実装する。
-    現在はスタブとしてダミーデータを返す。
+    """Gemini API呼び出し（型定義なし・JSON Mode使用）"""
+    try:
+        client = genai.Client(api_key=api_key)
 
-    実装例:
-        import google.generativeai as genai
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        response = model.generate_content(prompt)
+        response = await client.aio.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",  # JSON形式での出力を強制
+                temperature=0.3,
+            ),
+        )
+
         return json.loads(response.text)
-    """
+    except Exception as e:
+           print(f"Gemini API Error: {e}")
     return _dummy_recipes()
 
 
 async def _call_claude(prompt: str, api_key: str) -> list[dict]:
-    """
-    担当D: Claude API呼び出し
-    anthropic ライブラリを使って実装する。
-    現在はスタブとしてダミーデータを返す。
+    """Claude API呼び出し（型定義なし）"""
+    try:
+        client = AsyncAnthropic(api_key=api_key)
 
-    実装例:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
+        system_instruction = (
+            "あなたはレシピ提案AIです。回答は余計な解説文やMarkdownの枠組み（```json など）を一切含めず、"
+            "純粋なJSON配列（またはJSONオブジェクト）のみを出力してください。"
+        )
+
+        message = await client.messages.create(
+            model="claude-3-5-sonnet-20241022",
             max_tokens=2048,
+            system=system_instruction,
             messages=[{"role": "user", "content": prompt}],
         )
-        return json.loads(message.content[0].text)
-    """
-    return _dummy_recipes()
+
+        response_text = message.content[0].text
+        return json.loads(response_text)
+
+    except Exception as e:
+        print(f"Claude API Error: {e}")
+        return _dummy_recipes()
 
 
 def _dummy_recipes() -> list[dict]:
