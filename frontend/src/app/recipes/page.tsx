@@ -18,9 +18,14 @@ function RecipesContent() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [needsApiKey, setNeedsApiKey] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     const fetchRecipes = async () => {
+      setLoading(true);
+      setError("");
+      setNeedsApiKey(false);
       try {
         const params = {
           ingredients: searchParams.get("ingredients") ?? "",
@@ -38,6 +43,7 @@ function RecipesContent() {
         });
 
         if (!res.ok) {
+          setNeedsApiKey(res.status === 400);
           const data = await res.json();
           throw new Error(data.detail || "レシピの取得に失敗しました");
         }
@@ -51,7 +57,7 @@ function RecipesContent() {
       }
     };
     fetchRecipes();
-  }, [searchParams]);
+  }, [searchParams, retryCount]);
 
   if (loading) {
     return <div className="text-center py-16 text-base">🍳 AIがレシピを考え中...</div>;
@@ -61,16 +67,28 @@ function RecipesContent() {
     return (
       <div className="px-5 pt-10 space-y-4 text-center">
         <p className="text-red-500 font-semibold">{error}</p>
-        <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-          設定画面でAPIキーを入力してください
-        </p>
-        <button
-          className="rounded-xl px-6 py-2 font-bold text-white"
-          style={{ background: "var(--color-accent)" }}
-          onClick={() => router.push("/settings")}
-        >
-          設定画面へ
-        </button>
+        {needsApiKey ? (
+          <>
+            <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>
+              設定画面でAPIキーを入力してください
+            </p>
+            <button
+              className="rounded-xl px-6 py-2 font-bold text-white"
+              style={{ background: "var(--color-accent)" }}
+              onClick={() => router.push("/settings")}
+            >
+              設定画面へ
+            </button>
+          </>
+        ) : (
+          <button
+            className="rounded-xl px-6 py-2 font-bold text-white"
+            style={{ background: "var(--color-accent)" }}
+            onClick={() => setRetryCount((c) => c + 1)}
+          >
+            もう一度試す
+          </button>
+        )}
       </div>
     );
   }
