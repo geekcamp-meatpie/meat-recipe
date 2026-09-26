@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from config import app_config
-from services.ai_client import call_ai
+from services.ai_client import AIServiceError, call_ai
 from services.prompt_builder import build_prompt
 
 router = APIRouter()
@@ -32,10 +32,13 @@ async def suggest_recipes(req: RecipeRequest):
         medicines=app_config.medicines,
     )
 
-    recipes = await call_ai(
-        prompt=prompt,
-        provider=app_config.provider,
-        api_key=app_config.api_key,
-    )
+    try:
+        recipes = await call_ai(
+            prompt=prompt,
+            provider=app_config.provider,
+            api_key=app_config.api_key,
+        )
+    except AIServiceError as e:
+        raise HTTPException(status_code=502, detail=f"レシピの生成に失敗しました: {e}")
 
     return {"recipes": recipes}
