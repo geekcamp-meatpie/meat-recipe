@@ -13,8 +13,8 @@ from pydantic import BaseModel, Field
 def build_prompt(
     ingredients: str,
     mode: str,
-    flavor: str,
-    cooking_method: str,
+    taste: str,
+    cooking: str,
     genre: str,
     volume: str,
     medicines: list[str],
@@ -34,10 +34,10 @@ def build_prompt(
 
     # お好み設定（「おまかせ」の項目はプロンプトから省略）
     preferences = []
-    if flavor != "おまかせ":
-        preferences.append(f"【味の方向性】{flavor}")
-    if cooking_method != "おまかせ":
-        preferences.append(f"【調理法】{cooking_method}")
+    if taste != "おまかせ":
+        preferences.append(f"【味の方向性】{taste}")
+    if cooking != "おまかせ":
+        preferences.append(f"【調理法】{cooking}")
     if genre != "おまかせ":
         preferences.append(f"【ジャンル】{genre}")
     preferences.append(f"【ボリューム】{volume}")
