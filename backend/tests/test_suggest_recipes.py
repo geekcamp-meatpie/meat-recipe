@@ -25,9 +25,12 @@ client = TestClient(app)
 SAMPLE_RECIPES = [
     {
         "recipeName": "鶏もも肉の照り焼き",
+        "servings": "2人分",
         "cookingTime": 20,
         "difficulty": "簡単",
+        "cookware": "フライパン",
         "ingredients": ["鶏もも肉 300g", "醤油 大さじ2"],
+        "allergens": ["鶏肉", "大豆", "小麦"],
         "steps": ["切る", "焼く"],
         "point": "皮目からじっくり焼く",
         "warnings": [],
@@ -144,7 +147,50 @@ def test_parse_recipes_ok():
     assert ai_client._parse_recipes(json.dumps(SAMPLE_RECIPES)) == SAMPLE_RECIPES
 
 
-@pytest.mark.parametrize("text", ["not json", "{\"a\": 1}", None])
+def test_parse_recipes_drops_invalid_and_keeps_valid():
+    broken_missing_steps = {k: v for k, v in SAMPLE_RECIPES[0].items() if k != "steps"}
+    text = json.dumps([SAMPLE_RECIPES[0], broken_missing_steps, "文字列"])
+    assert ai_client._parse_recipes(text) == SAMPLE_RECIPES
+
+
+@pytest.mark.parametrize("value, expected", [(20, 20), ("約20分", 20), ("30", 30)])
+def test_cooking_time_is_coerced_to_int(value, expected):
+    recipe = {**SAMPLE_RECIPES[0], "cookingTime": value}
+    assert ai_client._parse_recipes(json.dumps([recipe]))[0]["cookingTime"] == expected
+
+
+def test_cooking_time_without_number_is_rejected():
+    recipe = {**SAMPLE_RECIPES[0], "cookingTime": "すぐ"}
+    with pytest.raises(AIServiceError):
+        ai_client._parse_recipes(json.dumps([recipe]))
+
+
+def test_warnings_shape_is_validated():
+    ok = {**SAMPLE_RECIPES[0], "warnings": [{"warningIngredient": "納豆", "warningReason": "薬の効果を弱める"}]}
+    assert ai_client._parse_recipes(json.dumps([ok]))[0]["warnings"] == ok["warnings"]
+    bad = {**SAMPLE_RECIPES[0], "warnings": ["納豆"]}
+    with pytest.raises(AIServiceError):
+        ai_client._parse_recipes(json.dumps([bad]))
+
+
+def test_gemini_receives_response_schema(monkeypatch):
+    captured = {}
+
+    class FakeModels:
+        async def generate_content(self, **kwargs):
+            captured.update(kwargs)
+            return type("R", (), {"text": json.dumps(SAMPLE_RECIPES)})()
+
+    class FakeClient:
+        def __init__(self, api_key):
+            self.aio = type("Aio", (), {"models": FakeModels()})()
+
+    monkeypatch.setattr(ai_client.genai, "Client", FakeClient)
+    asyncio.run(ai_client.call_ai("p", "gemini", "k"))
+    assert captured["config"].response_schema == list[ai_client.Recipe]
+
+
+@pytest.mark.parametrize("text", ["not json", "{\"a\": 1}", None, "[]", "[{\"recipeName\": \"だけ\"}]"])
 def test_parse_recipes_invalid_raises(text):
     with pytest.raises(AIServiceError):
         ai_client._parse_recipes(text)
