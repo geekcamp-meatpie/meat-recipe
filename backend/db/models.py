@@ -9,12 +9,12 @@ class Recipe(Base):
 
     __tablename__ = "recipes"
 
-    id = Column(Integer, primary_key=True)
-    name = Column(String, nullable=False)
-    genre = Column(String, nullable=False)
-    cooking_method = Column(String, nullable=False)
-    flavor = Column(String, nullable=False)
-    volume = Column(String, nullable=False)
+    id = Column(Integer, primary_key=True)                                       #主キー
+    name = Column(String, nullable=False)                                        # レシピ名
+    genre = Column(String, nullable=False)                                       # 料理のジャンル
+    cooking_method = Column(String, nullable=False)                              # 調理法
+    flavor = Column(String, nullable=False)                                      # 味つけ
+    volume = Column(String, nullable=False)                                      # 分量
     cooking_time = Column(Integer, nullable=False)  # 分
     difficulty = Column(String, nullable=False)
     steps = Column(Text, nullable=False)  # 手順の配列をJSON文字列として保持
