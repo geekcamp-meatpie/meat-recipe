@@ -22,11 +22,12 @@ async def suggest_recipes(req: RecipeRequest):
     if not app_config.api_key:
         raise HTTPException(status_code=400, detail="APIキーが設定されていません。設定画面からAPIキーを入力してください。")
 
+     # AIに渡すプロンプトで使うキーの設定
     prompt = build_prompt(
         ingredients=req.ingredients,
         mode=req.mode,
-        taste=req.taste,
-        cooking=req.cooking,
+        flavor=req.flavor,
+        cooking_method=req.cooking_method,
         genre=req.genre,
         volume=req.volume,
         medicines=app_config.medicines,
