@@ -12,7 +12,7 @@ from services.image_ai_client import IngredientDetection, analyze_image_ai, has_
 router = APIRouter()
 
 
-@router.post("/analyze-image", response_model=List[IngredientDetection])
+@router.post("/analyze-ingredients", response_model=List[IngredientDetection])
 async def analyze_image(file: UploadFile = File(...)):
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="アップロードされたファイルは画像ではありません。")
