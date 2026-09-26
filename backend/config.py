@@ -15,7 +15,8 @@ class AppConfig:
     """
 
     def __init__(self):
-        self.api_key: str = ""
+        # 環境変数 GEMINI_API_KEY（.env）を初期値にする。設定画面で保存したキーがあればそちらが優先される。
+        self.api_key: str = os.getenv("GEMINI_API_KEY", "")
         self.provider: str = "gemini"  # "gemini" or "claude"
         self.medicines: list[str] = []
 
