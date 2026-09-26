@@ -24,7 +24,6 @@ class Recipe(BaseModel):
     servings: str
     cookingTime: int
     difficulty: str
-    cookware: str
     ingredients: list[str]
     allergens: list[str]
     steps: list[str]

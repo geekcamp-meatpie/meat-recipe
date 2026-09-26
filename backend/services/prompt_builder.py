@@ -79,7 +79,6 @@ def build_prompt(
     "servings":"〇人分",
     "cookingTime": 調理時間（分・数値）,
     "difficulty": "簡単" or "普通" or "本格的",
-    "cookware":"必要な調理器具",
     "ingredients": ["材料1", "材料2", ...],
     "allergens": ["アレルゲン1", "アレルゲン2", ...],
     "steps": ["手順1", "手順2", ...],

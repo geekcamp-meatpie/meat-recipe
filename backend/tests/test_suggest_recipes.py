@@ -28,7 +28,6 @@ SAMPLE_RECIPES = [
         "servings": "2人分",
         "cookingTime": 20,
         "difficulty": "簡単",
-        "cookware": "フライパン",
         "ingredients": ["鶏もも肉 300g", "醤油 大さじ2"],
         "allergens": ["鶏肉", "大豆", "小麦"],
         "steps": ["切る", "焼く"],
