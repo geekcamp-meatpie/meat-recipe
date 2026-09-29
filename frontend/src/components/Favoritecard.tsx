@@ -34,7 +34,7 @@ export default function FavoriteCard({ data }: { data: any }) {
           </div>
 
           {/* 画像（右） */}
-          <img src="img/" alt="カルボナーラ" className="w-24 sm:w-40 shrink-0 object-cover"/>
+          <img src="img/" alt="カルボナーラ" className="w-35 sm:w-48 shrink-0 object-cover"/>
         </div>
       </div>   
 
