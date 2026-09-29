@@ -70,61 +70,80 @@ export default function HomePage() {
       </div>
 
       {/* 入力方法セクション */}
-      <div className="px-5 pt-6">
-        <div className="text-base font-bold mb-3.5" style={{ color: "var(--color-text)" }}>
+      <div className="px-5 pt-6 overflow-x-hidden">
+        <div className="text-base font-bold mb-3.5 md:text-center" style={{ color: "var(--color-text)" }}>
           食材の入力方法
         </div>
-        <div className="flex gap-2.5">
-          
-          {/* 担当B: カメラ撮影機能をここに実装 */}
-          <button
-           className="flex items-centr mt-2 w-30 h-10 rounded-2xl p-1 text-center shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-            style={{ background: "var(--color-card)" }}       >
-
-            <div
-              className="w-10 h-8 rounded-[14px] flex justify-left mb-3 text-[22px]"
-              style={{ background: "var(--color-icon-bg)" }}
-            >
-              📷
-            </div>
-            <h3 className="text-xs pt-2 pl-5 font-bold mb-1">撮影</h3>
-          </button>
-
-          {/* 担当B: アルバム選択機能をここに実装 */}              
-        <div className="text-base font-bold mb-3.5" style={{ color: "var(--color-text)" }}>
-            <form>           
-          <div className="w-8 h-8 rounded-[14px] flex items-center justify-center mx-auto mb-3 text-[22px]" style={{ background: "var(--color-icon-bg)" }}>
-            🖼️ </div>
-              <input
-               type="file"
-               accept="image/*"
-               capture="environment"
-               onChange={handleFileslect}
-              />              
-            </form>
-          </div>
-          
-            {/* テキスト入力エリア */}            
-             <button className="w-30 h-6 rounded-2xl text-center shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+        <div className="mx-auto w-full max-w-xl flex flex-col gap-3 md:items-center">
+          <div className="flex w-full flex-wrap items-center gap-2.5 md:justify-center">
+            {/* 担当B: カメラ撮影機能をここに実装 */}
+            <label
+              className="flex cursor-pointer items-center gap-2 h-10 shrink-0 rounded-2xl px-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
               style={{ background: "var(--color-card)" }}
-              onClick={handleSubmitImage}>送信</button>
+            >
+              <span
+                className="w-8 h-8 rounded-[14px] flex items-center justify-center text-[20px]"
+                style={{ background: "var(--color-icon-bg)" }}
+              >
+                📷
+              </span>
+              <span className="text-xs font-bold">撮影</span>
+              <input
+                className="sr-only"
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleFileslect}
+              />
+            </label>
+
+            {/* 担当B: アルバム選択機能をここに実装 */}
+            <form className="flex min-w-0 flex-1 items-center gap-2 md:flex-none">
+              <span
+                className="w-8 h-8 shrink-0 rounded-[14px] flex items-center justify-center text-[20px]"
+                style={{ background: "var(--color-icon-bg)" }}
+              >
+                🖼️
+              </span>
+              <label
+                className="cursor-pointer rounded-2xl px-3 py-2 text-xs font-bold shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                style={{ background: "var(--color-card)" }}
+              >
+                ファイルを選択
+                <input
+                  className="hidden"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileslect}
+                />
+              </label>
+            </form>
+
+            <button
+              className="h-10 shrink-0 rounded-2xl px-5 text-sm shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              style={{ background: "var(--color-card)" }}
+              onClick={handleSubmitImage}
+            >
+              送信
+            </button>
           </div>
-           
+
           <button
-            className="flex items-centr mt-4 w-130 h-10 rounded-2xl p-1 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            className="flex w-full md:w-auto md:min-w-80 items-center justify-center gap-2 h-10 rounded-2xl px-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
             style={{ background: "var(--color-card)" }}
             onClick={() => setShowTextInput(!showTextInput)}
-          >           
-            <div
-              className="w-8 h-8 rounded-[14px] mb-3 text-[22px]"
+          >
+            <span
+              className="w-8 h-8 rounded-[14px] flex items-center justify-center text-[20px]"
               style={{ background: "var(--color-icon-bg)" }}
             >
               ✏️
-            </div>
-            <p className="flex-1 pt-2 pl-5 text-[13px]" style={{ color: "var(--color-text-muted)" }}>
+            </span>
+            <span className="text-[13px]" style={{ color: "var(--color-text-muted)" }}>
               テキストで入力する
-            </p>
-          </button>        
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* テキスト入力エリア（テキストカードを押すと表示） */}
