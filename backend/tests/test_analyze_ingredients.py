@@ -80,7 +80,22 @@ def test_too_many_images(monkeypatch):
     )
 
     assert response.status_code == 400
-    assert "3枚" in response.json()["detail"]
+    assert f"{analyze_ingredients.MAX_IMAGES}枚" in response.json()["detail"]
+
+
+def test_total_size_too_large(monkeypatch):
+    monkeypatch.setattr(analyze_ingredients, "has_api_key", lambda: True)
+    # 1枚ずつは上限内だが、合計が上限を超える
+    each = b"\x00" * analyze_ingredients.MAX_IMAGE_BYTES
+    count = analyze_ingredients.MAX_TOTAL_BYTES // analyze_ingredients.MAX_IMAGE_BYTES + 1
+
+    response = client.post(
+        "/api/analyze-ingredients",
+        files=[("files", (f"{i}.png", each, "image/png")) for i in range(count)],
+    )
+
+    assert response.status_code == 413
+    assert "合計" in response.json()["detail"]
 
 
 def test_image_too_large(monkeypatch):
