@@ -27,7 +27,8 @@ def _load_row(db: Session | None) -> AppSettings | None:
 def get_settings(db: Session = Depends(get_db)):
     row = _load_row(db)
     if row is not None:
-        app_config.api_key = row.api_key
+        # DBに保存済みのキーがあれば優先し、空なら環境変数(.env)由来の値を保つ
+        app_config.api_key = row.api_key or app_config.api_key
         app_config.provider = row.provider
         app_config.medicines = json.loads(row.medicines)
 
