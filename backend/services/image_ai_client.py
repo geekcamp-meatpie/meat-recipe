@@ -39,16 +39,19 @@ def _get_client() -> genai.Client:
     return genai.Client()
 
 
-async def analyze_image_ai(image_bytes: bytes, mime_type: str) -> list[dict]:
-    """画像バイナリを受け取り、検出した食材のリスト（name, amount, confidence）を返す。"""
-    image_part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
-    prompt = build_image_prompt()
+async def analyze_image_ai(images: list[tuple[bytes, str]]) -> list[dict]:
+    """(画像バイナリ, MIMEタイプ) のリストを受け取り、検出した食材のリスト（name, amount, confidence）を返す。
+    複数枚は1回のリクエストにまとめて渡し、AI側で重複をまとめさせる。"""
+    image_parts = [types.Part.from_bytes(data=data, mime_type=mime) for data, mime in images]
+    prompt = build_image_prompt(len(image_parts))
 
     # 非同期エンドポイント内のため、同期版ではなく非同期版クライアントを使う
     # (同期版はイベントループ内で呼ぶとhttpxクライアントがクローズ済み扱いになり失敗する)
     response = await _get_client().aio.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=[image_part, prompt],
+        # gemini-2.5-flash は新規ユーザー向けに提供終了済み(404)のため、実APIキーで動作確認済みの
+        # gemini-3.5-flash-lite を使用する。gemini-3.8-flash は動作するが高負荷時に503が頻発した。
+        model="gemini-3.5-flash-lite",
+        contents=[*image_parts, prompt],
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
             response_schema=IngredientResponse,

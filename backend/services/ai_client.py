@@ -62,7 +62,9 @@ async def _call_gemini(prompt: str, api_key: str) -> list[dict]:
         client = genai.Client(api_key=api_key)
 
         response = await client.aio.models.generate_content(
-            model="gemini-2.5-flash",
+            # gemini-2.5-flash は新規ユーザー向けに提供終了済み(404)のため、実APIキーで動作確認済みの
+            # gemini-3.5-flash-lite を使用する。gemini-3.8-flash は動作するが高負荷時に503が頻発した。
+            model="gemini-3.5-flash-lite",
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",  # JSON形式での出力を強制

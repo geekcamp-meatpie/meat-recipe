@@ -3,9 +3,16 @@
 """
 
 
-def build_image_prompt() -> str:
+def build_image_prompt(image_count: int = 1) -> str:
     """Gemini（マルチモーダル）に渡す、食材検出用のプロンプトを返す。"""
-    return """画像に写っている食材をすべて検出し、その名前、量、確信度（confidence）を抽出してください。
+    if image_count > 1:
+        target = (
+            f"{image_count}枚の画像は同じ食材群を別の角度から撮影したものです。"
+            "全画像に写っている食材をすべて検出し、複数の画像に同じ食材が写っている場合は1件にまとめて（重複して数えないで）、"
+        )
+    else:
+        target = "画像に写っている食材をすべて検出し、"
+    return target + """その名前、量、確信度（confidence）を抽出してください。
 
 出力は余計な解説やMarkdown表記を含めず、以下のJSON配列形式（純粋なJSONテキスト）のみで出力してください。
 
