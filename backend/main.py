@@ -10,6 +10,7 @@ app = FastAPI(title="Want Cooking API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
+    allow_origin_regex=r"http://192\.168\.\d+\.\d+:3000",
     allow_methods=["*"],
     allow_headers=["*"],
 )

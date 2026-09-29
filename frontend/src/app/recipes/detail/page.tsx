@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { isFavorite, toggleFavorite } from "@/lib/favorites";
 
 interface Recipe {
   recipeName: string;
@@ -16,10 +17,15 @@ interface Recipe {
 export default function RecipeDetailPage() {
   const router = useRouter();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
+  const [favorite, setFavorite] = useState(false);
 
   useEffect(() => {
     const stored = sessionStorage.getItem("selectedRecipe");
-    if (stored) setRecipe(JSON.parse(stored));
+    if (stored) {
+      const r: Recipe = JSON.parse(stored);
+      setRecipe(r);
+      setFavorite(isFavorite(r.recipeName));
+    }
   }, []);
 
   if (!recipe) {
@@ -85,6 +91,14 @@ export default function RecipeDetailPage() {
           {recipe.point}
         </p>
       </div>
+
+      <button
+        className="w-full rounded-xl p-3 font-bold text-white transition"
+        style={{ background: favorite ? "#e11d48" : "var(--color-accent)" }}
+        onClick={() => setFavorite(toggleFavorite(recipe))}
+      >
+        {favorite ? "♥ お気に入り済み（タップで解除）" : "♡ お気に入りに追加"}
+      </button>
 
       <button
         className="w-full rounded-xl p-3 font-bold transition"
