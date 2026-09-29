@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Want Cooking",
+  title: "Meat Recipe",
   description: "冷蔵庫の食材からAIがレシピを提案",
 };
 
