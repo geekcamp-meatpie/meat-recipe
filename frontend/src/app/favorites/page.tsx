@@ -9,7 +9,12 @@ export default function FavoritesPage() {
     <div className="px-5 pt-6">
        {/* タイトル */}
       <h1 className="text-3xl font-bold text-center mb-8">♡お気に入りレシピ♡</h1>
-      <div className="gap-4 flex justify-center"><FavoriteCard data={getFavoritesList} /><FavoriteCard data={getFavoritesList} /><FavoriteCard data={getFavoritesList} /><FavoriteCard data={getFavoritesList} /><FavoriteCard data={getFavoritesList} /><FavoriteCard data={getFavoritesList} /><FavoriteCard data={getFavoritesList} /><FavoriteCard data={getFavoritesList} /><FavoriteCard data={getFavoritesList} /><FavoriteCard data={getFavoritesList} /></div>
+      <div className="gap-4 flex flex-wrap"><FavoriteCard data={getFavoritesList} />
+      <FavoriteCard data={getFavoritesList} /><FavoriteCard data={getFavoritesList} />
+      <FavoriteCard data={getFavoritesList} /><FavoriteCard data={getFavoritesList} />
+      <FavoriteCard data={getFavoritesList} /><FavoriteCard data={getFavoritesList} />
+      <FavoriteCard data={getFavoritesList} /><FavoriteCard data={getFavoritesList} />
+      <FavoriteCard data={getFavoritesList} /></div>
      
       {/* レシピ一覧 */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-6"></div>
@@ -21,3 +26,8 @@ export default function FavoritesPage() {
     </div>
   );
 }
+
+// お気に入りレシピを縦に並べる(12行目)
+/* <div className="gap-4 flex ____"><FavoriteCard. . . . .
+____ → flex-wrap
+>>縦に並べる. 画面の幅によって横に並ぶ数が変わる        */
