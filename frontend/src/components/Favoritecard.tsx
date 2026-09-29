@@ -7,21 +7,18 @@ export default function FavoriteCard({ data }: { data: any }) {
   <div className="gap-4 p-1">    
 
         {/* レシピカード */}
-        <div className="bg-white rounded-3xl w-70 shadow-md overflow-hidden hover:shadow-xl transition duration-300">
-          {/* 画像 */}
-          <img src="img/" alt="カルボナーラ" className="w-70 h-52 object-cover"/>
-
-          {/* 内容 */}
-          <div className="p-5">
+        <div className="bg-white rounded-3xl w-full shadow-md overflow-hidden hover:shadow-xl transition duration-300 flex min-h-45 md:min-h-55">
+          {/* 内容（左） */}
+          <div className="p-3 sm:p-5 flex-1 min-w-0">
             {/* タイトル+ハート */}
             <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold">カルボナーラ</h2>
+              <h2 className="text-base sm:text-xl font-bold">カルボナーラ</h2>
 
               <button>
                 <p className="text-red-500 fill-red-500 size={28}"></p>
               </button>
            </div>
-            
+
             {/* 食材 */}
             <p className="text-gray-500 mt-3">
               ベーコン・卵・牛乳
@@ -35,7 +32,10 @@ export default function FavoriteCard({ data }: { data: any }) {
               <button className="heart">♡Favorites</button>
             </div>
           </div>
-        </div>      
+
+          {/* 画像（右） */}
+          <img src="img/" alt="カルボナーラ" className="w-24 sm:w-40 shrink-0 object-cover"/>
+        </div>
       </div>   
 
  
