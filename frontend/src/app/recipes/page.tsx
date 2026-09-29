@@ -36,7 +36,7 @@ function RecipesContent() {
           volume: searchParams.get("volume") ?? "普通",
         };
 
-        const res = await fetch("http://localhost:8000/api/suggest-recipes", {
+        const res = await fetch("/api/suggest-recipes", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(params),

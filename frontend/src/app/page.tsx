@@ -1,5 +1,4 @@
 "use client";
-import axios from "axios";
 import { useState } from "react";
 const ingredientData: Record<string, string[]> = {
   野菜: ["キャベツ", "きゅうり", "トマト", "玉ねぎ", "にんじん", "じゃがいも"],
@@ -17,6 +16,8 @@ export default function HomePage() {
   const [ingredientText, setIngredientText] = useState("");
   const [showTextInput, setShowTextInput] = useState(false);
   const [image, setImage] = useState<File | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [imageError, setImageError] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedIngredients, setSelectedIngredients] = useState<string[]>([]);
   const toggleIngredient = (ingredient: string) => {
@@ -39,9 +40,41 @@ export default function HomePage() {
     router.push(`/confirm?${params.toString()}`);
   };
   const handleFileslect = (e: React.ChangeEvent<HTMLInputElement>) => {setImage(e.target.files?.[0] || null);};
-  const handleSubmitImage = async (e: React.MouseEvent<HTMLButtonElement, MouseEvent>) => { 
-         e.preventDefault();
-        axios.post('http://127.0.0.1:8000/suggest-recipes', image, { headers: { 'Content-Type': 'multipart/form-data' } }).then(response => {const ingredients = response.data.ingredients})};
+  const handleSubmitImage = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    if (!image) {
+      setImageError("先に写真を選択または撮影してください。");
+      return;
+    }
+    setImageError("");
+    setAnalyzing(true);
+    try {
+      const formData = new FormData();
+      formData.append("files", image);
+      const res = await fetch("/api/analyze-ingredients", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.detail || "画像の解析に失敗しました。");
+      }
+      const detected: { name: string; amount: string }[] = await res.json();
+      if (detected.length === 0) {
+        setImageError("食材を認識できませんでした。別の写真をお試しください。");
+        return;
+      }
+      const text = detected
+        .map((d) => (d.amount && d.amount !== "不明" ? `${d.name} ${d.amount}` : d.name))
+        .join(", ");
+      setIngredientText((prev) => (prev.trim() ? `${prev}, ${text}` : text));
+      setShowTextInput(true);
+    } catch (err) {
+      setImageError(err instanceof Error ? err.message : "画像の解析に失敗しました。");
+    } finally {
+      setAnalyzing(false);
+    }
+  };
     return(
     <>
       {/* ヒーロー */}
@@ -77,8 +110,8 @@ export default function HomePage() {
         <div className="mx-auto w-full max-w-xl flex flex-col gap-3 md:items-center">
           <div className="flex w-full flex-wrap items-center gap-2.5 md:justify-center">
             {/* 担当B: カメラ撮影機能をここに実装 */}
-            <label
-              className="flex cursor-pointer items-center gap-2 h-10 shrink-0 rounded-2xl px-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            <div
+              className="relative flex items-center gap-2 h-10 shrink-0 rounded-2xl px-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
               style={{ background: "var(--color-card)" }}
             >
               <span
@@ -89,44 +122,52 @@ export default function HomePage() {
               </span>
               <span className="text-xs font-bold">撮影</span>
               <input
-                className="sr-only"
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                 type="file"
                 accept="image/*"
                 capture="environment"
                 onChange={handleFileslect}
               />
-            </label>
+            </div>
 
             {/* 担当B: アルバム選択機能をここに実装 */}
-            <form className="flex min-w-0 flex-1 items-center gap-2 md:flex-none">
+            <form className="flex min-w-0 flex-1 items-center gap-2 md:flex-none" suppressHydrationWarning>
               <span
                 className="w-8 h-8 shrink-0 rounded-[14px] flex items-center justify-center text-[20px]"
                 style={{ background: "var(--color-icon-bg)" }}
               >
                 🖼️
               </span>
-              <label
-                className="cursor-pointer rounded-2xl px-3 py-2 text-xs font-bold shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              <div
+                className="relative rounded-2xl px-3 py-2 text-xs font-bold shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
                 style={{ background: "var(--color-card)" }}
               >
                 ファイルを選択
                 <input
-                  className="hidden"
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                   type="file"
                   accept="image/*"
                   onChange={handleFileslect}
                 />
-              </label>
+              </div>
             </form>
 
             <button
               className="h-10 shrink-0 rounded-2xl px-5 text-sm shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
               style={{ background: "var(--color-card)" }}
               onClick={handleSubmitImage}
+              disabled={analyzing}
             >
-              送信
+              {analyzing ? "解析中..." : "送信"}
             </button>
           </div>
+
+          {image && (
+            <p className="text-xs" style={{ color: "var(--color-text-sub)" }}>
+              選択中: {image.name}
+            </p>
+          )}
+          {imageError && <p className="text-xs text-red-600">{imageError}</p>}
 
           <button
             className="flex w-full md:w-auto md:min-w-80 items-center justify-center gap-2 h-10 rounded-2xl px-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"

@@ -10,7 +10,7 @@ export default function SettingsPage() {
   const [newMedicine, setNewMedicine] = useState("");
 
   useEffect(() => {
-    fetch("http://localhost:8000/api/settings")
+    fetch("/api/settings")
       .then((res) => res.json())
       .then((data) => {
         setApiKey(data.api_key || "");
@@ -22,7 +22,7 @@ export default function SettingsPage() {
 
   const handleSave = async () => {
     try {
-      await fetch("http://localhost:8000/api/settings", {
+      await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ api_key: apiKey, provider, medicines }),
