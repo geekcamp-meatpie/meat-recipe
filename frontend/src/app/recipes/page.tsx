@@ -10,6 +10,7 @@ interface Recipe {
   ingredients: string[];
   steps: string[];
   point: string;
+  imageUrl?: string;
 }
 
 function RecipesContent() {
@@ -22,6 +23,26 @@ function RecipesContent() {
   const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
+    // 条件変更・再試行・画面遷移で古い画像取得の結果が反映されないようにする
+    let cancelled = false;
+
+    // レシピ1件分の料理イメージ画像を取得し、届いた順にカードへ反映する。失敗しても🍽️のまま表示する
+    const fetchImage = async (recipe: Recipe) => {
+      try {
+        const res = await fetch("/api/generate-recipe-image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ recipeName: recipe.recipeName, ingredients: recipe.ingredients }),
+        });
+        if (!res.ok) return;
+        const { imageUrl } = await res.json();
+        if (cancelled || !imageUrl) return;
+        setRecipes((prev) => prev.map((r) => (r.recipeName === recipe.recipeName ? { ...r, imageUrl } : r)));
+      } catch {
+        // 画像は付加要素なので、エラーは表示しない
+      }
+    };
+
     const fetchRecipes = async () => {
       setLoading(true);
       setError("");
@@ -49,7 +70,9 @@ function RecipesContent() {
         }
 
         const data = await res.json();
+        if (cancelled) return;
         setRecipes(data.recipes);
+        data.recipes.forEach(fetchImage);
       } catch (err) {
         setError(err instanceof Error ? err.message : "エラーが発生しました");
       } finally {
@@ -57,6 +80,9 @@ function RecipesContent() {
       }
     };
     fetchRecipes();
+    return () => {
+      cancelled = true;
+    };
   }, [searchParams, retryCount]);
 
   if (loading) {
@@ -115,10 +141,15 @@ function RecipesContent() {
             }}
           >
             <div
-              className="w-[52px] h-[52px] rounded-xl flex items-center justify-center text-[26px] shrink-0"
+              className="w-[52px] h-[52px] rounded-xl flex items-center justify-center text-[26px] shrink-0 overflow-hidden"
               style={{ background: "var(--color-hero-start)" }}
             >
-              🍽️
+              {recipe.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={recipe.imageUrl} alt={recipe.recipeName} className="w-full h-full object-cover" />
+              ) : (
+                "🍽️"
+              )}
             </div>
             <div className="flex-1">
               <h3 className="text-sm font-bold mb-1">{recipe.recipeName}</h3>

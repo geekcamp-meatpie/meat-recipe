@@ -7,6 +7,7 @@ load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_API_KEY = os.getenv("SUPABASE_API", "")
 DATABASE_URL = os.getenv("DATABASE_URL", "")
+SUPABASE_IMAGE_BUCKET = os.getenv("SUPABASE_IMAGE_BUCKET", "recipe-images")
 
 
 class AppConfig:

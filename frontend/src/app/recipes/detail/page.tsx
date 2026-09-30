@@ -13,6 +13,7 @@ interface Recipe {
   steps: string[];
   point: string;
   warnings?: { warningIngredient: string; warningReason: string }[];
+  imageUrl?: string;
 }
 
 export default function RecipeDetailPage() {
@@ -36,6 +37,11 @@ export default function RecipeDetailPage() {
 
   return (
     <div className="px-5 pt-6 space-y-5">
+      {recipe.imageUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={recipe.imageUrl} alt={recipe.recipeName} className="w-full aspect-square object-cover rounded-2xl" />
+      )}
+
       <h1 className="text-lg font-bold">{recipe.recipeName}</h1>
 
       <div className="flex gap-3 text-[11px]" style={{ color: "var(--color-text-muted)" }}>

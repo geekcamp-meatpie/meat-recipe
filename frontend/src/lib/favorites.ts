@@ -6,9 +6,16 @@ export interface FavoriteRecipe {
   steps: string[];
   point: string;
   warnings?: { warningIngredient: string; warningReason: string }[];
+  /** 料理イメージ画像のURL（/api/generate-recipe-image の結果） */
+  imageUrl?: string;
 }
 
 const KEY = "favoriteRecipes";
+
+/** localStorageに入れる前に、容量の大きいdata URL（Storage未設定時のフォールバック画像）を取り除く */
+export function withoutDataUrlImage<T extends { imageUrl?: string }>(recipe: T): T {
+  return recipe.imageUrl?.startsWith("data:") ? { ...recipe, imageUrl: undefined } : recipe;
+}
 
 export function getFavorites(): FavoriteRecipe[] {
   try {
@@ -27,7 +34,7 @@ export function isFavorite(recipeName: string): boolean {
 export function toggleFavorite(recipe: FavoriteRecipe): boolean {
   const list = getFavorites();
   const exists = list.some((r) => r.recipeName === recipe.recipeName);
-  const next = exists ? list.filter((r) => r.recipeName !== recipe.recipeName) : [recipe, ...list];
+  const next = exists ? list.filter((r) => r.recipeName !== recipe.recipeName) : [withoutDataUrlImage(recipe), ...list];
   try {
     localStorage.setItem(KEY, JSON.stringify(next));
   } catch {
