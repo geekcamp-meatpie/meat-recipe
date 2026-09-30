@@ -20,6 +20,7 @@ export default function RecipeDetailPage() {
   const router = useRouter();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [favorite, setFavorite] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
 
   useEffect(() => {
     const stored = sessionStorage.getItem("selectedRecipe");
@@ -31,15 +32,55 @@ export default function RecipeDetailPage() {
     }
   }, []);
 
+  // 一覧で画像の生成が間に合わないうちにタップされた場合は、ここで取得する（生成済みなら再利用される）
+  const recipeName = recipe?.recipeName;
+  const hasImage = !!recipe?.imageUrl;
+  const ingredientsKey = recipe?.ingredients.join("\n");
+  useEffect(() => {
+    if (!recipeName || hasImage) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/generate-recipe-image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ recipeName, ingredients: ingredientsKey?.split("\n") ?? [] }),
+        });
+        const imageUrl = res.ok ? (await res.json()).imageUrl : undefined;
+        if (cancelled) return;
+        if (imageUrl) setRecipe((prev) => (prev ? { ...prev, imageUrl } : prev));
+        else setImageFailed(true);
+      } catch {
+        if (!cancelled) setImageFailed(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [recipeName, hasImage, ingredientsKey]);
+
   if (!recipe) {
     return <div className="text-center py-16">レシピが見つかりません</div>;
   }
 
   return (
     <div className="px-5 pt-6 space-y-5">
-      {recipe.imageUrl && (
+      {recipe.imageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={recipe.imageUrl} alt={recipe.recipeName} className="w-full aspect-square object-cover rounded-2xl" />
+        <img
+          src={recipe.imageUrl}
+          alt={recipe.recipeName}
+          className="w-full aspect-square sm:aspect-video object-cover rounded-3xl shadow-md"
+        />
+      ) : (
+        <div
+          className={`w-full aspect-square sm:aspect-video rounded-3xl flex items-center justify-center text-6xl ${
+            imageFailed ? "" : "animate-pulse"
+          }`}
+          style={{ background: "var(--color-hero-start)" }}
+        >
+          🍽️
+        </div>
       )}
 
       <h1 className="text-lg font-bold">{recipe.recipeName}</h1>

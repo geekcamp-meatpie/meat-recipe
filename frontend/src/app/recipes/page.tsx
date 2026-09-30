@@ -2,6 +2,7 @@
 
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
+import RecipeCard from "@/components/RecipeCard";
 
 interface Recipe {
   recipeName: string;
@@ -11,6 +12,7 @@ interface Recipe {
   steps: string[];
   point: string;
   imageUrl?: string;
+  imageFailed?: boolean;
 }
 
 function RecipesContent() {
@@ -34,12 +36,18 @@ function RecipesContent() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ recipeName: recipe.recipeName, ingredients: recipe.ingredients }),
         });
-        if (!res.ok) return;
-        const { imageUrl } = await res.json();
-        if (cancelled || !imageUrl) return;
-        setRecipes((prev) => prev.map((r) => (r.recipeName === recipe.recipeName ? { ...r, imageUrl } : r)));
+        const imageUrl = res.ok ? (await res.json()).imageUrl : undefined;
+        if (cancelled) return;
+        setRecipes((prev) =>
+          prev.map((r) =>
+            r.recipeName === recipe.recipeName ? (imageUrl ? { ...r, imageUrl } : { ...r, imageFailed: true }) : r
+          )
+        );
       } catch {
-        // 画像は付加要素なので、エラーは表示しない
+        // 画像は付加要素なので、エラーは表示せず🍽️のまま表示する
+        if (!cancelled) {
+          setRecipes((prev) => prev.map((r) => (r.recipeName === recipe.recipeName ? { ...r, imageFailed: true } : r)));
+        }
       }
     };
 
@@ -126,39 +134,25 @@ function RecipesContent() {
         ※ AIが提案したレシピです。分量や手順は目安としてご利用ください。
       </p>
 
-      <div className="space-y-2.5">
-        {recipes.map((recipe, i) => (
-          <button
-            key={i}
-            className="w-full text-left flex items-center gap-3.5 rounded-2xl p-3.5 transition hover:shadow-md"
-            style={{
-              background: "var(--color-card)",
-              boxShadow: "0 1px 6px rgba(0,0,0,0.06)",
-            }}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {recipes.map((recipe) => (
+          <RecipeCard
+            key={recipe.recipeName}
+            recipe={recipe}
             onClick={() => {
-              sessionStorage.setItem("selectedRecipe", JSON.stringify(recipe));
+              const { imageFailed, ...selected } = recipe;
+              void imageFailed;
+              try {
+                sessionStorage.setItem("selectedRecipe", JSON.stringify(selected));
+              } catch {
+                // 画像(data URL)が大きくて保存できない場合は画像なしで渡す（詳細画面側で再取得する）
+                const { imageUrl, ...withoutImage } = selected;
+                void imageUrl;
+                sessionStorage.setItem("selectedRecipe", JSON.stringify(withoutImage));
+              }
               router.push("/recipes/detail");
             }}
-          >
-            <div
-              className="w-[52px] h-[52px] rounded-xl flex items-center justify-center text-[26px] shrink-0 overflow-hidden"
-              style={{ background: "var(--color-hero-start)" }}
-            >
-              {recipe.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={recipe.imageUrl} alt={recipe.recipeName} className="w-full h-full object-cover" />
-              ) : (
-                "🍽️"
-              )}
-            </div>
-            <div className="flex-1">
-              <h3 className="text-sm font-bold mb-1">{recipe.recipeName}</h3>
-              <p className="text-[11px]" style={{ color: "var(--color-text-muted)" }}>
-                調理時間: {recipe.cookingTime}分 ・ {recipe.difficulty}
-              </p>
-            </div>
-            <span style={{ color: "#ccc" }}>›</span>
-          </button>
+          />
         ))}
       </div>
     </div>
