@@ -31,7 +31,7 @@ uvicorn main:app --reload   # http://localhost:8000
 ## アーキテクチャ
 
 ### 全体構成
-モノレポ構成で `frontend/`（Next.js + TypeScript）と `backend/`（FastAPI + Python）が分離している。フロントはすべて `/api/...` へ `fetch` し、`frontend/next.config.ts` の rewrites が `http://127.0.0.1:8000/api/...` へ中継する（バックエンドのポートを変えるときはここを直す）。バックエンドのCORSは `http://localhost:3000` とLAN内IP（`192.168.x.x:3000`）を許可。Googleログインは Supabase Auth（フロントの `AuthProvider` / `lib/supabase.ts`、環境変数は `frontend/.env.local`）。
+モノレポ構成で `frontend/`（Next.js + TypeScript）と `backend/`（FastAPI + Python）が分離している。フロントはすべて `/api/...` へ `fetch` し、`frontend/next.config.ts` の rewrites が、環境変数 `BACKEND_URL`（未設定なら `http://127.0.0.1:8000`）の `/api/...` へ中継する（デプロイ時はRenderなどのバックエンドのURLを設定する。手順は `README.md` の「デプロイ」）。バックエンドのCORSは `http://localhost:3000` とLAN内IP（`192.168.x.x:3000`）を許可。Googleログインは Supabase Auth（フロントの `AuthProvider` / `lib/supabase.ts`、環境変数は `frontend/.env.local`）。
 
 ### 画面遷移とデータの受け渡し（フロント）
 グローバルな状態管理ライブラリは使わず、**URLクエリパラメータ**で画面間をリレーする設計。
