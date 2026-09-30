@@ -1,193 +1,238 @@
 # Meat Recipe - お料理提案アプリ
 
-冷蔵庫の食材を入力すると、AIがレシピを提案してくれるアプリ。
+冷蔵庫に余った食材（テキスト入力または写真）から、AIが作れる料理を提案するWebアプリ。
+自炊の献立の悩みと、フードロスの削減を解決することが目的。将来的にCapacitor.jsでiOS/Androidアプリ化する予定（未着手）。
+
+> このREADMEは2026-09-30時点の実装に合わせている。開発途中で方針が変わった箇所は「[当初の予定から変わったところ](#当初の予定から変わったところ)」にまとめた。
+
+---
 
 ## 技術スタック
 
-| レイヤー | 技術 |
-|----------|------|
-| フロントエンド | Next.js + React + TypeScript |
-| バックエンド | FastAPI（Python） |
-| AI（開発中） | Gemini API |
-| AI（本番） | Claude API |
+| レイヤー | 技術 | 備考 |
+|----------|------|------|
+| フロントエンド | Next.js 16（App Router）+ React 19 + TypeScript + Tailwind CSS 4 | |
+| バックエンド | FastAPI + Pydantic 2（Python） | |
+| AI | Gemini API（`google-genai`） | レシピ提案・画像からの食材認識・料理画像の生成。Claude APIへの切り替え口もある（後述） |
+| 認証 | Supabase Auth（Googleログイン） | ログインは任意。フロントは `@supabase/supabase-js` |
+| DB | Supabase（PostgreSQL） | バックエンドはSQLAlchemy、お気に入りはフロントから supabase-js で直接アクセス（RLSで保護） |
+| ファイル保存 | Supabase Storage | 生成した料理画像（公開バケット） |
+| テスト | pytest（バックエンドのみ） | フロントの自動テストは無し |
+| UIデザイン | Figma / `message.html`（原案） | |
 
 ---
 
 ## セットアップ
 
-### フロントエンド
+### 前提
 
-```bash
-cd frontend
-npm install
-npm run dev
-# → http://localhost:3000
-```
+- Node.js（フロント）
+- **Python 3.11〜3.13**。3.14では `pydantic` や `psycopg2-binary` のビルド済みwheelが無く `pip install` が失敗する
+- Supabaseプロジェクト（ログイン・DB・画像保存を使う場合。無くても起動と基本のレシピ提案は動く）
+- Gemini APIキー（[Google AI Studio](https://aistudio.google.com/) で取得）
 
-### バックエンド
+### 1. バックエンド
 
 ```bash
 cd backend
+py -3.13 -m venv .venv          # Windows。venvはリポジトリ直下に作ってもよい
+.venv/Scripts/activate
 pip install -r requirements.txt
+pip install pytest              # テストを動かす場合（requirements.txtには未記載）
+cp .env.example .env            # 値を埋める
 uvicorn main:app --reload
 # → http://localhost:8000
 ```
 
+`backend/.env` の項目:
+
+| 変数 | 内容 |
+|------|------|
+| `GEMINI_API_KEY` | Geminiのキー。設定画面で保存したキーがあればそちらが優先される |
+| `SUPABASE_URL` | `https://<プロジェクトID>.supabase.co` |
+| `SUPABASE_API` | Supabaseの **service_role キー**（ログイン検証・退会・Storage保存に使う）。**バックエンドの `.env` にだけ置き、フロントやgitには絶対に入れない** |
+| `DATABASE_URL` | SupabaseのPostgreSQL接続文字列（画像生成の上限管理・設定の永続化に使う） |
+| `SUPABASE_IMAGE_BUCKET` | 画像の保存先バケット名（既定 `recipe-images`。公開バケットとして作成しておく） |
+| `IMAGE_DAILY_LIMIT` | 1ユーザーが1日（日本時間）に生成できる画像枚数（既定10） |
+
+`DATABASE_URL` などが未設定でも起動は継続する（DB無しでも動く設計）。ただしDB未接続の間は、画像生成は上限を管理できないため無効になり、設定はメモリ上にのみ保持される。
+
+### 2. フロントエンド
+
+```bash
+cd frontend
+npm install
+cp .env.example .env.local      # 値を埋める
+npm run dev
+# → http://localhost:3000
+```
+
+`frontend/.env.local` の項目（Supabaseの Project Settings → API から取得）:
+
+| 変数 | 内容 |
+|------|------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon / public キー（**service_role キーは入れない**） |
+
+環境変数は起動時に読み込まれるため、変更したら `npm run dev` を再起動する。
+
+フロントからのAPI呼び出しはすべて `/api/...` で行い、`next.config.ts` の rewrites でバックエンド（`http://127.0.0.1:8000`）へ中継している。バックエンドのポートを変える場合は `next.config.ts` を直す。
+
+### 3. Supabase側の設定（ログイン・お気に入りを使う場合）
+
+1. **Google Cloud Console**: OAuthクライアントID（ウェブ）を作成し、承認済みリダイレクトURIに `https://<プロジェクトID>.supabase.co/auth/v1/callback` を登録する
+2. **Supabase → Authentication → Providers → Google** を有効にし、クライアントIDとシークレットを入力する
+3. **Supabase → Authentication → URL Configuration** の Redirect URLs に `http://localhost:3000/auth/callback` を追加する
+4. **SQL Editor** で `supabase/migrations/20260930000000_favorites.sql` を実行する（お気に入り用の `user_recipes` / `favorites` テーブルとRLSが作られる。何度実行しても安全）
+5. **Storage** に公開バケット `recipe-images` を作成する（料理画像の保存先）
+
+### 4. テスト・Lint
+
+```bash
+cd backend && python -m pytest -q     # DBには接続しない（tests/conftest.py で DATABASE_URL を空にする）
+cd frontend && npm run lint
+```
+
 ---
 
-## ディレクトリ構成と担当ガイド
+## ディレクトリ構成
 
 ```
 meat-recipe/
-├── message.html                  ← デザイン原案（参照用）
-├── frontend/                     ← フロントエンド（Next.js + TypeScript）
+├── README.md
+├── Claude.md                        ← Claude Code向けの案内（一部が古い。後述）
+├── message.html                     ← デザイン原案（GitHub Pagesにはこのファイルだけが公開される）
+├── docs/                            ← 設計メモ（recipe-retrieval-strategy.md は廃止済み方針の内容）
+├── supabase/migrations/             ← Supabaseで手動実行するSQL（お気に入りテーブル）
+│
+├── frontend/                        ← Next.js + TypeScript
+│   ├── next.config.ts               ← /api → バックエンドへのrewrites、LAN内端末からの開発アクセス許可
 │   └── src/
 │       ├── app/
-│       │   ├── layout.tsx        ← 全体レイアウト（TopBar + BottomNav）
-│       │   ├── globals.css       ← CSS変数・カラーテーマ定義
-│       │   ├── page.tsx          ← ホーム画面（食材入力）
-│       │   ├── confirm/
-│       │   │   └── page.tsx      ← 食材確認画面（タグ編集）
-│       │   ├── mode/
-│       │   │   └── page.tsx      ← モード選択・お好み設定画面
+│       │   ├── layout.tsx           ← 全体レイアウト（AuthProvider + TopBar + BottomNav）
+│       │   ├── globals.css          ← CSS変数・カラーテーマ
+│       │   ├── page.tsx             ← ホーム（食材のテキスト入力／写真撮影・選択→食材認識）
+│       │   ├── confirm/             ← 食材確認（タグの編集）
+│       │   ├── mode/                ← 提案モード＋お好み設定
 │       │   ├── recipes/
-│       │   │   ├── page.tsx      ← レシピ提案一覧画面
-│       │   │   └── detail/
-│       │   │       └── page.tsx  ← レシピ詳細画面
-│       │   ├── settings/
-│       │   │   └── page.tsx      ← 設定画面（APIキー入力・薬管理）
-│       │   ├── search/
-│       │   │   └── page.tsx      ← 検索画面（未実装プレースホルダー）
-│       │   └── favorites/
-│       │       └── page.tsx      ← お気に入り画面（未実装プレースホルダー）
-│       └── components/
-│           ├── TopBar.tsx        ← 上部ヘッダー
-│           └── BottomNav.tsx     ← 下部ナビゲーション
+│       │   │   ├── page.tsx         ← レシピ提案一覧
+│       │   │   └── detail/          ← レシピ詳細（料理画像の生成・自分の写真の追加・お気に入り）
+│       │   ├── favorites/           ← お気に入り一覧
+│       │   ├── record/              ← 閲覧履歴（最大50件、端末内のみ）
+│       │   ├── search/              ← 検索（未実装プレースホルダー）
+│       │   ├── settings/            ← ログイン／APIキー／薬の管理／退会
+│       │   ├── privacy/             ← プライバシーポリシー
+│       │   └── auth/callback/       ← Googleログイン後の戻り先
+│       ├── components/              ← AuthProvider, TopBar, BottomNav, RecipeCard, FavoriteCard
+│       └── lib/
+│           ├── supabase.ts          ← Supabaseクライアント
+│           ├── favorites.ts         ← お気に入り（ログイン中=Supabase／未ログイン=localStorage）
+│           ├── history.ts           ← 閲覧履歴（localStorage）
+│           └── image.ts             ← 画像の縮小処理
 │
-└── backend/                      ← バックエンド（FastAPI / Python）
-    ├── main.py                   ← FastAPIエントリーポイント（CORS設定等）
-    ├── config.py                 ← アプリ設定管理（APIキー・薬情報の保持）
-    ├── requirements.txt          ← Python依存パッケージ
+└── backend/                         ← FastAPI + Python
+    ├── main.py                      ← エントリーポイント（CORS・ルーター登録・起動時のテーブル作成）
+    ├── config.py                    ← 環境変数の読み込みと、メモリ上の設定（APIキー・プロバイダ・薬）
+    ├── db/                          ← client.py（DB接続。未設定ならNone）、models.py
     ├── routers/
-    │   ├── recipes.py            ← POST /api/suggest-recipes エンドポイント
-    │   └── settings.py           ← GET/POST /api/settings エンドポイント
-    └── services/
-        ├── ai_client.py          ← AI API呼び出し（Gemini/Claude切り替え）
-        └── prompt_builder.py     ← プロンプトテンプレート組み立て
+    │   ├── recipes.py               ← レシピ提案
+    │   ├── analyze_ingredients.py   ← 写真からの食材認識
+    │   ├── recipe_image.py          ← 料理画像の生成・上限確認・プロンプト取得
+    │   ├── settings.py              ← 設定の取得・保存
+    │   └── account.py               ← 退会
+    ├── services/
+    │   ├── prompt_builder.py        ← レシピ提案プロンプトの組み立て（モード・お好み・薬）
+    │   ├── ai_client.py             ← Gemini/Claude呼び出しとレスポンスの検証
+    │   ├── recipe_image_*.py        ← 料理画像のプロンプトと生成
+    │   ├── image_ai_client.py / image_prompt_builder.py ← 食材認識用
+    │   ├── image_storage.py         ← Supabase Storageへの保存・再利用
+    │   ├── image_quota.py           ← 画像生成の1日上限（PostgreSQLのUPSERTで排他制御）
+    │   └── auth.py                  ← SupabaseのトークンからユーザーIDを特定
+    └── tests/                       ← pytest
 ```
 
----
+### 画面遷移
 
-## 担当別ガイド
+グローバルな状態管理は使わず、URLクエリで画面間を受け渡す。
 
-### 担当A: フロントUI
+```
+/ (食材入力) → /confirm?ingredients=... → /mode?ingredients=... → /recipes?ingredients=...&mode=...&taste=...
+                                                                      → /recipes/detail（選んだ1件はsessionStorageで受け渡し）
+```
 
-**主な作業ファイル:**
+ボトムナビ: ホーム / 検索 / お気に入り / 記録 / 設定
 
-| ファイル | 何をするか |
-|----------|-----------|
-| `frontend/src/app/page.tsx` | ホーム画面のレイアウト・テキスト入力欄のUI |
-| `frontend/src/app/confirm/page.tsx` | 食材確認画面のタグUI |
-| `frontend/src/app/mode/page.tsx` | モード選択・お好み設定のUI |
-| `frontend/src/app/recipes/page.tsx` | レシピ一覧のカードUI |
-| `frontend/src/app/recipes/detail/page.tsx` | レシピ詳細画面のレイアウト |
-| `frontend/src/app/settings/page.tsx` | 設定画面のフォームUI |
-| `frontend/src/app/search/page.tsx` | 検索画面（今後実装） |
-| `frontend/src/app/favorites/page.tsx` | お気に入り画面（今後実装） |
-| `frontend/src/components/TopBar.tsx` | 上部ヘッダーのデザイン |
-| `frontend/src/components/BottomNav.tsx` | 下部ナビのデザイン |
-| `frontend/src/app/globals.css` | カラーテーマ・CSS変数 |
+### APIエンドポイント
 
-**デザインの指針:**
-- `message.html` のデザイン（配色・カード形状・レイアウト）を基準にする
-- CSS変数は `globals.css` の `:root` に定義済み（`--color-accent: #eeaa44` 等）
+| メソッド | パス | 認証 | 用途 |
+|----------|------|------|------|
+| GET | `/` | - | ヘルスチェック |
+| GET/POST | `/api/settings` | なし | APIキー・プロバイダ・薬リストの取得／保存 |
+| POST | `/api/suggest-recipes` | なし | 食材＋モード＋お好みからレシピ3〜5件を生成（薬の警告付き） |
+| POST | `/api/analyze-ingredients` | なし | 写真（最大3枚・1枚5MB・JPEG/PNG/WebP）から食材を抽出 |
+| POST | `/api/generate-recipe-image` | 要ログイン | 料理画像を1枚生成しStorageへ保存。同名レシピは保存済みを再利用。1日 `IMAGE_DAILY_LIMIT` 枚まで |
+| GET | `/api/image-quota` | 要ログイン | 今日の画像生成の残り枚数 |
+| POST | `/api/recipe-image-prompt` | なし | 画像を生成しない人向けに、Geminiアプリへ貼るプロンプトを返す |
+| DELETE | `/api/account` | 要ログイン | 退会（Supabase Authのユーザー削除＋利用回数の削除） |
 
 ---
 
-### 担当B: カメラ・画像処理
+## 当初の予定から変わったところ
 
-**主な作業ファイル:**
-
-| ファイル | 何をするか |
-|----------|-----------|
-| `frontend/src/app/page.tsx` | ホーム画面の「撮影」「写真選択」カードに実際のカメラ/アルバム機能を接続する |
-| `backend/routers/recipes.py` | 画像付きリクエストを受け取るエンドポイントの拡張（マルチパート対応等） |
-| `backend/services/ai_client.py` | マルチモーダルAPI呼び出しの実装（画像→食材名特定） |
-
-**現在の状態:**
-- ホーム画面の撮影・写真選択ボタンは `alert()` のプレースホルダーになっている
-- `onClick` ハンドラを実際のカメラAPI呼び出しに差し替える
-
----
-
-### 担当C: バックエンドAPI
-
-**主な作業ファイル:**
-
-| ファイル | 何をするか |
-|----------|-----------|
-| `backend/main.py` | FastAPIのエントリーポイント。ルーターの追加・ミドルウェア設定 |
-| `backend/config.py` | アプリ設定管理。DB永続化する場合はここを書き換える |
-| `backend/routers/recipes.py` | レシピ提案のエンドポイント。リクエスト/レスポンス型の定義 |
-| `backend/routers/settings.py` | 設定の読み書きエンドポイント |
-| `backend/requirements.txt` | Pythonパッケージの追加 |
-
-**APIエンドポイント一覧:**
-
-| メソッド | パス | 用途 |
-|----------|------|------|
-| GET | `/` | ヘルスチェック |
-| GET | `/api/settings` | 現在の設定を取得 |
-| POST | `/api/settings` | 設定を保存（APIキー・プロバイダー・薬リスト） |
-| POST | `/api/suggest-recipes` | 食材＋設定を受けてAIにレシピ提案を依頼 |
+| 項目 | 当初の予定 | 現状 |
+|------|-----------|------|
+| レシピの取得方法 | 自作レシピDB（seed）＋食材マッチングのスコアリング＋足りない分だけAIが補完 | **廃止**。食材・モード・お好みからAIに毎回レシピを生成させる方式に一本化。`docs/recipe-retrieval-strategy.md` は古いまま |
+| AI | 開発中はGemini、本番はClaude | 実際に動いているのはGeminiのみ（モデルは `gemini-3.5-flash-lite`）。`gemini-2.5-flash` は新規ユーザー向けに提供終了、`gemini-3.8-flash` は高負荷時に503が多く使わなかった。Claudeへの切り替えはコードにあるが、実APIでの動作確認はしていない |
+| 画像認識 | 「写真を撮る」ボタンはプレースホルダー | 実装済み。複数枚を1回のGeminiリクエストにまとめ、別角度の同一食材は重複させない。枚数上限は当初5枚→**3枚**に変更 |
+| ログイン | 想定なし | **追加**。Supabase AuthのGoogleログイン（任意）。ログインするとお気に入りが端末をまたいで使え、画像生成が可能になる |
+| 料理画像の生成 | 想定なし | **追加**。レシピ詳細で生成でき、Supabase Storageに保存して再利用。コスト管理のためログイン必須＋1日10枚まで。生成しない人向けに「Geminiアプリ用プロンプトのコピー」と「自分の写真を追加」も用意 |
+| お気に入り | 未実装プレースホルダー | 実装済み。ログイン中はSupabase、未ログインはlocalStorage。初回ログイン時に端末内のお気に入りを移行 |
+| 記録（履歴）画面 | 画面一覧に無し | **追加**（`/record`）。閲覧したレシピを端末内に最大50件 |
+| 退会・プライバシーポリシー | 想定なし | **追加**。設定画面から退会でき、`/privacy` にポリシーを掲載 |
+| 薬管理 | 独立した画面。`/api/medicines` でCRUD | 設定画面に統合。専用APIは作らず `/api/settings` に薬リストを含めた。レシピ提案時にプロンプトへ渡し、`warnings` として返す |
+| DB | 設定の永続化とレシピseed用 | 設定（`app_settings`）・画像の利用回数（`image_usage`）はバックエンド、お気に入りはSupabaseへフロントから直接。レシピseed用テーブルは使われていない |
+| API呼び出し | 各ページで `http://localhost:8000` を直書き | `/api` へのrewritesに統一（スマホなどLAN内の端末からポート3000だけで使える） |
+| テスト | 無し | バックエンドにpytestを追加（レシピ提案・食材認識・画像生成・設定・退会） |
+| スマホアプリ化（Capacitor.js） | Web完成後に着手 | 未着手 |
 
 ---
 
-### 担当D: AI・プロンプト設計
+## 現時点で修正する余地があるところ
 
-**主な作業ファイル:**
+### 公開前に必ず対応したい（セキュリティ）
 
-| ファイル | 何をするか |
-|----------|-----------|
-| `backend/services/prompt_builder.py` | プロンプトテンプレートの設計・チューニング |
-| `backend/services/ai_client.py` | Gemini/Claude APIの実際の呼び出し実装。現在はダミーデータを返すスタブ |
+- **`/api/settings` に認証が無く、全ユーザーで1つの設定を共有している。** APIキー・プロバイダ・薬リストは、ユーザーごとではなくサーバー全体で1件（`app_settings` の `id=1`）を持つ。`GET` はAPIキーをそのまま返し、誰でも書き換えられる。薬は健康情報でもある。複数人が使う環境に置く前に、ログインユーザーごとの保存＋認証、またはキーをサーバーの環境変数だけにしてAPIから返さない形へ変更が必要
+- **`/api/suggest-recipes` と `/api/analyze-ingredients` も認証・回数制限が無い。** 上記の共有キーでGeminiが呼べるため、公開すると誰でも課金を発生させられる。画像生成にあるログイン必須＋1日上限と同様の制御が要る
 
-**現在の状態:**
-- `prompt_builder.py` にハンドオーバー資料のプロンプト仕様が実装済み
-- `ai_client.py` の `_call_gemini()` / `_call_claude()` はダミーデータを返す状態
-- APIキーを取得したら、コメント内の「実装例」を参考に実API呼び出しに差し替える
-- 薬チェック機能のプロンプト部分も `prompt_builder.py` に組み込み済み
+### 不具合・整合性
 
----
+- **`test_analyze_ingredients.py::test_total_size_too_large` が失敗する。** 上限を5枚→3枚に変えたため、「合計20MB」に達する前に枚数超過（400）で弾かれ、テストの期待する413にならない。合計サイズの上限（15MB以下にしか達しない）かテストのどちらかを直す
+- **`/confirm` `/mode` `/recipes` `/recipes/detail` を直接開いたときのガードが無い。** クエリや `sessionStorage` が空でも画面が開き、食材が空のままAPIを呼ぶ／空の画面になる。ホームへ戻す処理を入れたい（Issue #6の残り）
+- **Claude側の実装が古く未検証。** モデルIDが `claude-3-5-sonnet-20241022` のままで、`response_schema` 相当の形式強制が無い。画像生成・食材認識はGeminiのみ対応
+- **DBの定義が2か所に分かれている。** バックエンドのテーブル（`app_settings` / `image_usage`）は起動時の `create_all`、お気に入りは `supabase/migrations/` のSQLを手動実行。マイグレーション管理（Alembic等）を導入するか、運用ルールを決めたい
+- **退会しても料理画像はStorageに残る。** 画像はレシピ名をキーに全ユーザーで共有しているため意図的だが、方針としてプライバシーポリシーに書くかどうか確認したい
 
-### DB担当（担当Cまたは専任）
+### 未実装・未着手
 
-DB設計は既に完了しており、人間側で管理します。  
-以下にDB関連で編集が必要になるファイルを示します。
+- 検索画面（`/search`）
+- 履歴が端末内（localStorage）のみで、端末をまたいで同期されない
+- デプロイ方法（`next.config.ts` のバックエンドURL `127.0.0.1:8000` とバックエンドのCORS許可 `localhost:3000` / LAN内IPは開発用の値）
+- Capacitor.jsによるスマホアプリ化
+- フロントの自動テスト（Lintのみ）
 
-**DB接続・永続化で編集するファイル:**
+### 不要になったものの整理
 
-| ファイル | 何をするか |
-|----------|-----------|
-| `backend/config.py` | 現在メモリ上で設定を保持している。DB読み書きに置き換える場所 |
-| `backend/routers/settings.py` | 設定のGET/POSTがメモリ（config.py）を参照している。DB経由に変更する |
-| `backend/routers/recipes.py` | お気に入り保存・履歴保存等を追加する場合はここにエンドポイントを追加 |
-| `backend/requirements.txt` | DB関連パッケージ（SQLAlchemy, asyncpg 等）を追加 |
-
-**DB関連で新規作成が想定されるファイル:**
-
-| ファイル（例） | 用途 |
-|---------------|------|
-| `backend/database.py` | DB接続設定・セッション管理 |
-| `backend/models/` | SQLAlchemy等のモデル定義 |
-| `backend/schemas/` | Pydanticスキーマ（既存のroutersに組み込んでもOK） |
-| `backend/alembic/` | マイグレーション管理（Alembic使用時） |
+- `backend/db/models.py` の `Recipe` / `RecipeIngredient` はレシピseed方針の名残で、どこからも使われていないが、起動時の `create_all` でテーブルが作られてしまう
+- `backend/requirements.txt` の `google-generativeai`（旧SDK）と、`frontend/package.json` の `axios` はコード上で使われていない
+- `frontend/prompts/promrt.md`（ファイル名のtypoあり）は作業用のメモのように見える
+- `docs/recipe-retrieval-strategy.md` は廃止済みの方針を「現行方針」として書いている。`docs/medication-check.md` も `/api/medicines` を前提にしていて実装と異なる
+- **`Claude.md` が古い。** 旧方針のスタブ実装、`localhost:8000` の直書き、画像5枚、「テストは無い」など、現状と合わない記述が残っている
 
 ---
 
-## 現在の状態
+## 開発ルール
 
-- **フロント**: 全画面の骨格が動作する状態。`message.html` の配色に合わせたUI
-- **バックエンド**: エンドポイントが動作する状態。AIはダミーデータを返す
-- **APIキー**: 設定画面で入力欄を用意済み。実API呼び出しは担当Dが実装する
-- **DB**: 未実装（現在はメモリ上で設定を保持）
+- ブランチ名は `<内容>#<Issue番号>`（例: `supabase#7`）。Issueごとにブランチを作り、Pull Requestでレビューしてから `main` にマージする
+- `main` は常にデプロイ可能な状態を保つ
+- `.env` / `.env.local` は `.gitignore` で除外済み。**キーやシークレットは絶対にコミットしない**（`.env.example` は空欄のまま）
+- レシピの正確性は保証できないため、画面には「AIが提案したレシピです」と表示する。薬のチェックは参考情報であり、医療上の判断は医師・薬剤師に相談するよう表示する
