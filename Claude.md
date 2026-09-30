@@ -23,15 +23,15 @@ pip install -r requirements.txt
 uvicorn main:app --reload   # http://localhost:8000
 ```
 
-- `backend/.env`（`.env.example`参照）に `SUPABASE_URL` / `SUPABASE_API` / `DATABASE_URL` を設定する。未設定でも起動は継続できる（後述のDBフォールバック設計）。
-- Gemini呼び出しには環境変数 `GEMINI_API_KEY`（または `/api/settings` 経由で保存したキー）が必要。
+- `backend/.env`（`.env.example`参照）に `SUPABASE_URL` / `SUPABASE_API`（service_roleキー）/ `DATABASE_URL` を設定する。未設定でも起動は継続できる（後述のDBフォールバック設計）。
+- Gemini呼び出しには環境変数 `GEMINI_API_KEY`（または `/api/settings` 経由で保存したキー）が必要。フロントは `frontend/.env.local` に `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` が必要（`.env.example` 参照）。
 - **Python 3.14では `pydantic`（Rust拡張）や `psycopg2-binary` のビルド済みwheelが無く `pip install` が失敗する。Python 3.11〜3.13を使うこと**（`py -3.13 -m venv .venv` 等）。
-- 自動テストは現状フロント・バックエンドともに存在しない（pytest/jest等の設定なし）。
+- バックエンドのテストは `python -m pytest`（`backend/tests/`。`conftest.py` が `DATABASE_URL` を空にするのでDBには接続しない。pytestは `requirements.txt` に無いので別途インストールする）。`test_analyze_ingredients.py::test_total_size_too_large` は、画像上限を5枚→3枚にした際に合計サイズ上限へ到達できなくなったため失敗する（既知）。フロントの自動テストは無い。
 
 ## アーキテクチャ
 
 ### 全体構成
-モノレポ構成で `frontend/`（Next.js + TypeScript）と `backend/`（FastAPI + Python）が分離しており、フロントは各ページから直接 `http://localhost:8000` へ `fetch` している（環境変数化されておらず、ポート変更時は各ページのハードコードを直す必要がある）。バックエンドのCORSは `http://localhost:3000` のみ許可。
+モノレポ構成で `frontend/`（Next.js + TypeScript）と `backend/`（FastAPI + Python）が分離している。フロントはすべて `/api/...` へ `fetch` し、`frontend/next.config.ts` の rewrites が `http://127.0.0.1:8000/api/...` へ中継する（バックエンドのポートを変えるときはここを直す）。バックエンドのCORSは `http://localhost:3000` とLAN内IP（`192.168.x.x:3000`）を許可。Googleログインは Supabase Auth（フロントの `AuthProvider` / `lib/supabase.ts`、環境変数は `frontend/.env.local`）。
 
 ### 画面遷移とデータの受け渡し（フロント）
 グローバルな状態管理ライブラリは使わず、**URLクエリパラメータ**で画面間をリレーする設計。
@@ -42,26 +42,33 @@ page.tsx(ホーム/食材入力)
   → recipes/page.tsx(POST /api/suggest-recipes してカード一覧表示)
   → recipes/detail/page.tsx(sessionStorageで選択レシピを1件だけ受け渡し)
 ```
-`settings/page.tsx`（APIキー・薬管理）と `favorites/`・`search/`（未実装プレースホルダー）はボトムナビからの独立ページ。スタイリングはTailwind CSSのユーティリティクラスと、`globals.css` の `:root` で定義したCSS変数（`--color-accent` 等）を併用している。
+`settings/page.tsx`（ログイン・APIキー・薬管理・退会）、`favorites/`、`record/`（閲覧履歴。localStorageに最大50件）、`privacy/`、`auth/callback/`（Googleログイン後の戻り先）はボトムナビ等からの独立ページ。`search/` は未実装プレースホルダー。お気に入りの保存先はログイン中がSupabase、未ログインがlocalStorage（`lib/favorites.ts`）。スタイリングはTailwind CSSのユーティリティクラスと、`globals.css` の `:root` で定義したCSS変数（`--color-accent` 等）を併用している。
+
+`/confirm` `/mode` `/recipes` `/recipes/detail` は、クエリや `sessionStorage` が空の状態で直接開いたときのガードが無い（既知の未対応）。
 
 ### バックエンドのルーター構成
 | ルーター | パス | 実装状況 |
 |---|---|---|
-| `routers/recipes.py` | `POST /api/suggest-recipes` | 実装済みだが `services/ai_client.py` がダミーレシピ固定を返すスタブのまま（Issue #3未着手） |
-| `routers/settings.py` | `GET/POST /api/settings` | 実装済み。APIキー・provider・薬リストをDB永続化 |
-| `routers/analyze_ingredients.py` | `POST /api/analyze-ingredients` | 実装済み（Gemini構造化出力で画像から食材抽出）。マルチパートの `files` フィールドで最大5枚（1枚5MB・合計20MBまで、JPEG/PNG/WebPのみ）を受け付け、超過は400/413を返す。複数枚は1回のGeminiリクエストにまとめ、別角度の同一食材は重複させない。フロント側の呼び出しコードは未実装（Issue #18の写真撮影機能が繋がっていない） |
-| `routers/recipe_image.py` | `POST /api/generate-recipe-image` | 実装済み。レシピ名・材料から料理イメージ画像をGeminiで1枚生成し、Supabase Storage（公開バケット `SUPABASE_IMAGE_BUCKET`、既定 `recipe-images`）に保存して `imageUrl` を返す。同じレシピ名は保存済み画像を再利用（再生成しない）。Storage未設定・保存失敗時はdata URLを返す。providerがgeminiのときのみ。フロントは `/api/suggest-recipes` の後、レシピごとに並列で呼び、届いた順にカードへ反映する（2段階方式） |
+| `routers/recipes.py` | `POST /api/suggest-recipes` | 実装済み。Gemini（`ai_client.py`）で実際にレシピを生成し、薬リストがあれば `warnings` も付ける。認証・回数制限なし |
+| `routers/settings.py` | `GET/POST /api/settings` | 実装済み。APIキー・provider・薬リストをDB永続化。認証なし・全ユーザー共有（後述） |
+| `routers/analyze_ingredients.py` | `POST /api/analyze-ingredients` | 実装済み（Gemini構造化出力で画像から食材抽出）。マルチパートの `files` フィールドで最大3枚（`MAX_IMAGES`。1枚5MB、JPEG/PNG/WebPのみ）を受け付け、超過は400/413を返す。複数枚は1回のGeminiリクエストにまとめ、別角度の同一食材は重複させない。フロントのホーム画面から呼び出し済み。認証なし |
+| `routers/recipe_image.py` | `POST /api/generate-recipe-image` ほか | 実装済み。**ログイン必須**で、レシピ名・材料から料理イメージ画像をGeminiで1枚生成し、Supabase Storage（公開バケット `SUPABASE_IMAGE_BUCKET`、既定 `recipe-images`。バケットは手動作成）に保存して `imageUrl` を返す。同じレシピ名は保存済み画像を再利用（再生成せず上限にも数えない）。1ユーザー1日 `IMAGE_DAILY_LIMIT` 枚（日本時間、既定10）まで。Storage未設定・保存失敗時はdata URLを返す。providerがgeminiのときのみ。フロントはレシピ詳細画面で、ユーザーが「生成する」を選んだときだけ呼ぶ。`GET /api/image-quota`（残り枚数、要ログイン）と `POST /api/recipe-image-prompt`（Geminiアプリに貼るプロンプトを返す、認証なし）も同ルーター |
+| `routers/account.py` | `DELETE /api/account` | 実装済み。ログイン中のユーザーを Supabase Admin API（service_roleキー）で削除し、`image_usage` の行も消す |
 
-`main.py` にルーターをinclude router名で登録する構成のため、**ルーターファイル名とimport/include_router呼び出しの名前を必ず一致させること**（過去に `routers/ingredients.py` を削除して `analyze_ingredients.py` に差し替えた際、mainの参照更新漏れでサーバーが起動不能になった実例あり）。
+認証は `services/auth.py` の `get_current_user_id`（`Authorization: Bearer <Supabaseのアクセストークン>` を `/auth/v1/user` に問い合わせて検証）を `Depends` で付けたエンドポイントだけがログイン必須。`.env` の `SUPABASE_API` は **service_role キー**なので、バックエンド以外に置かないこと。
 
 ### 設定の永続化とDBフォールバック設計
-`backend/config.py` の `app_config`（`AppConfig`インスタンス）はメモリ上のシングルトンで、各ルーターがこれを参照する。`db/client.py` は `DATABASE_URL` 未設定時に `engine`/`SessionLocal` を `None` にしてimport時のクラッシュを防ぎ、`main.py` の起動イベントでDB接続失敗時も警告ログのみでアプリ起動を継続する設計になっている。**新しくDB依存のコードを足す場合もこの「DB無しでも起動だけはできる」パターンを踏襲すること**。`db/models.py` には `Recipe` / `RecipeIngredient`（Issue #8のseedデータ用、未投入）と `AppSettings`（設定永続化用、稼働中）が定義されている。
+`backend/config.py` の `app_config`（`AppConfig`インスタンス）はメモリ上のシングルトンで、各ルーターがこれを参照する。`db/client.py` は `DATABASE_URL` 未設定時に `engine`/`SessionLocal` を `None` にしてimport時のクラッシュを防ぎ、`main.py` の起動イベントでDB接続失敗時も警告ログのみでアプリ起動を継続する設計になっている。**新しくDB依存のコードを足す場合もこの「DB無しでも起動だけはできる」パターンを踏襲すること**（画像生成は上限を管理できないため、DB未接続なら503で生成しない）。`db/models.py` には `AppSettings`（設定永続化、稼働中）と `ImageUsage`（画像生成の1日上限、稼働中。起動時にRLSを有効化して anon から触れないようにしている）、未使用の `Recipe` / `RecipeIngredient` が定義されている。お気に入り（`user_recipes` / `favorites`）だけはSQLAlchemyではなく `supabase/migrations/` のSQLを手動で実行して作り、フロントが supabase-js で直接読み書きする（RLSで保護）。
+
+**注意（既知の問題）**: `app_config` と `app_settings`（`id=1` の1行）は全ユーザーで共有で、`/api/settings` に認証が無い。GETはAPIキーをそのまま返す。複数人が使う環境に公開する前に要対応（詳細は `README.md` 参照）。
 
 ### Gemini呼び出しの注意点
-`google-genai`（`from google import genai`、新SDK）と `google-generativeai`（旧SDK）が両方requirements.txtに入っているが、実際に使われているのは新SDKの方（`analyze_ingredients.py`）。**FastAPIの非同期エンドポイント内でGeminiを呼ぶ場合は `client.aio.models.generate_content()` を `await` すること**。同期版 `client.models.generate_content()` をasync def内で呼ぶと、httpxクライアントがクローズ済み扱いになり必ず失敗する（実際に踏んだ不具合）。
+`google-genai`（`from google import genai`、新SDK）と `google-generativeai`（旧SDK）が両方requirements.txtに入っているが、実際に使われているのは新SDKの方（`ai_client.py` / `analyze_ingredients.py` / `recipe_image_client.py`）。旧SDKはコード上で使われていない。**FastAPIの非同期エンドポイント内でGeminiを呼ぶ場合は `client.aio.models.generate_content()` を `await` すること**。同期版 `client.models.generate_content()` をasync def内で呼ぶと、httpxクライアントがクローズ済み扱いになり必ず失敗する（実際に踏んだ不具合）。
 
-### レシピ取得方針：仕様と実装の乖離に注意
-`docs/recipe-retrieval-strategy.md` に記載の**現行方針**は「自作レシピDB（seed）＋食材マッチングスコアリング＋DBヒット不足時のみAIアレンジ補完」（Issue #8, #9, #11, #12, #13）だが、**現在の `POST /api/suggest-recipes` の実装はこの方針を反映しておらず、旧方針（AIに毎回フルでレシピ生成させる）のスタブのまま**になっている。DB検索・スコアリング・お好み設定フィルタのロジックはまだ影も形も無い。このエンドポイントを触る際は `docs/recipe-retrieval-strategy.md` を先に読み、どちらの方針で実装すべきか確認すること。
+レシピ生成のモデルは `gemini-3.5-flash-lite`（`gemini-2.5-flash` は新規ユーザー向けに提供終了で404、`gemini-3.8-flash` は高負荷時に503が多発）。Claude側（`_call_claude`）はコードはあるが、モデルIDが古く実APIでの動作確認もしていない。
+
+### レシピ取得方針
+`POST /api/suggest-recipes` は、`prompt_builder.build_prompt()` で組み立てたプロンプトをAIに送り、`ai_client.call_ai()` がJSONスキーマ（Geminiは `response_schema=list[Recipe]`）でレシピの配列を受け取る。形式に合わないレシピは除外し、有効なものが0件なら502を返す。当初計画していた「自作レシピDB（seed）＋検索スコアリング＋AIアレンジ補完」は廃止した。`docs/recipe-retrieval-strategy.md` と、`db/models.py` の `Recipe` / `RecipeIngredient`（どこからも使われていないが起動時の `create_all` でテーブルは作られる）はその名残なので、前提にしないこと。
 
 ### ブランチ運用
 ブランチ名は `<内容>#<Issue番号>`（例: `supabase#7`, `api-setting#4`）の命名規則。Issueごとに対応ブランチを作り、GitHub PRでmainにマージする運用。
@@ -105,7 +112,7 @@ Webアプリ→スマホアプリへの移行方針: まずNext.js + ReactでWeb
 | 3 | モード選択・お好み設定画面 | 提案モードの選択 + 味の方向性・調理法・ジャンル・ボリューム感の設定 |
 | 4 | レシピ提案画面 | AIが提案した料理一覧（3〜5件） |
 | 5 | レシピ詳細画面 | 材料・手順・調理時間など |
-| 6 | 薬管理画面 | 服用中の薬の登録・管理（サブ機能） |
+| 6 | 薬管理画面 | 服用中の薬の登録・管理（サブ機能）。実装では独立画面にせず設定画面（`/settings`）に統合した |
 
 ### 4. 提案モード
 
@@ -138,10 +145,10 @@ AI API（Gemini / Claude）
 | 既存レシピをAPIで取得 | ❌ 不採用 | 著作権・利用規約リスクが大きい。合法的に食材ベースで検索できるレシピAPIがほぼ存在しない |
 | 楽天レシピAPI | ❌ 不採用 | カテゴリ検索のみで食材ベースの検索不可、1カテゴリ上位4件のみ、商用利用禁止、APIバージョンが2017年で停止 |
 | ユーザー投稿型 | ❌ 不採用 | コールドスタート問題。レシピが集まるまでアプリが機能しない |
-| AIに毎回フルでレシピ生成させる | ❌ 不採用（初期案からの方針転換） | 著作権リスクはゼロだが、レシピの品質・再現性が不安定になりやすい |
-| **自作レシピDB（seed）＋検索スコアリング＋AIアレンジ補完** | ✅ 採用（現行方針、未実装） | 著作権リスクなし。DB検索で再現性のあるレシピを優先しつつ、DBの手持ちが少ない場合のみAIが補完してカバレッジを確保する |
+| **AIに毎回レシピを生成させる**（プロンプトで食材・モード・お好み・薬を指定し、JSONスキーマで形式を強制） | ✅ 採用（現行方針、実装済み） | 実装がシンプルで、お好み設定や薬の警告もプロンプトだけで反映できる。品質・再現性は、プロンプトと出力の検証（`ai_client.py` の `Recipe` モデル）で補う |
+| 自作レシピDB（seed）＋検索スコアリング＋AIアレンジ補完 | ❌ 廃止（当初は採用予定だった） | 方針転換により実装しなかった |
 
-現行方針の詳細な仕組み（seedデータ投入→全文検索→スコアリング→お好み設定フィルタ→AIアレンジ補完→`source`フィールドでDB/AI由来を明示）は `docs/recipe-retrieval-strategy.md` を参照。**アーキテクチャ節で述べた通り、この方針はまだ実装に反映されていない。**
+現行方針は「食材・モード・お好み設定・登録した薬をプロンプトにして、AIに毎回レシピを生成させる」方式（`services/prompt_builder.py` → `services/ai_client.py`）。自作DB（seed）＋スコアリング方式は廃止した（`docs/recipe-retrieval-strategy.md` は廃止前の内容のまま残っている）。
 
 注意点: レシピの正確性は保証されないため「AIが提案したレシピです」と明示する。開発中はGemini API（無料枠）で開発コストを抑える。
 
@@ -166,7 +173,7 @@ AI API（Gemini / Claude）
 
 ### 9. サブ機能: 薬と食材の相互作用チェック
 
-服用している薬を登録しておくと、レシピ提案時に薬との相性が悪い食材を自動で警告する機能（例: ワルファリン×納豆、降圧剤×グレープフルーツ、MAO阻害薬×チーズ/赤ワイン）。詳細・API仕様（`/api/medicines`のCRUD、`warnings`フィールドの形式）は `docs/medication-check.md` 参照。
+服用している薬を登録しておくと、レシピ提案時に薬との相性が悪い食材を自動で警告する機能（例: ワルファリン×納豆、降圧剤×グレープフルーツ、MAO阻害薬×チーズ/赤ワイン）。詳細は `docs/medication-check.md` 参照（ただし同docsの `/api/medicines` のCRUDは作らず、薬リストは `/api/settings` に含めて保存している。`warnings` フィールドの形式はdocs通り）。
 
 「AIによる参考情報であり、医療上の判断は必ず医師・薬剤師にご相談ください」という免責事項を必ず表示する。サブ機能として位置づけ、メインのレシピ提案機能の完成を優先する。
 
