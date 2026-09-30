@@ -16,7 +16,7 @@ export function getHistory(): HistoryRecipe[] {
 
 /** 先頭に追加する。同名レシピは重複させず最新の閲覧として先頭へ移動し、最大MAX件まで保持 */
 export function addHistory(recipe: HistoryRecipe): void {
-  const next = [withoutDataUrlImage(recipe), ...getHistory().filter((r) => r.recipeName !== recipe.recipeName)].slice(0, MAX);
+  const next = [{ ...withoutDataUrlImage(recipe), userImageUrl: undefined },...getHistory().filter((r) => r.recipeName !== recipe.recipeName)].slice(0, MAX);
   try {
     localStorage.setItem(KEY, JSON.stringify(next));
   } catch {

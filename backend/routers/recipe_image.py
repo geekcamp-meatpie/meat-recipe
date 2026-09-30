@@ -15,6 +15,7 @@ from config import app_config
 from services import image_storage
 from services.ai_client import AIServiceError
 from services.recipe_image_client import generate_recipe_image
+from services.recipe_image_prompt_builder import build_recipe_image_prompt
 
 router = APIRouter()
 
@@ -25,6 +26,12 @@ _generation_slots = asyncio.Semaphore(2)
 class RecipeImageRequest(BaseModel):
     recipeName: str = Field(min_length=1)
     ingredients: list[str] = []
+
+
+@router.post("/recipe-image-prompt")
+async def recipe_image_prompt_endpoint(req: RecipeImageRequest):
+    """画像生成を使わないユーザーが、Geminiアプリに貼って画像を作るためのプロンプトを返す（AI呼び出しなし）。"""
+    return {"prompt": build_recipe_image_prompt(req.recipeName, req.ingredients)}
 
 
 @router.post("/generate-recipe-image")

@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import type { FavoriteRecipe } from "@/lib/favorites";
+import { displayImage, type FavoriteRecipe } from "@/lib/favorites";
 
 export default function FavoriteCard({
   recipe,
@@ -11,9 +11,9 @@ export default function FavoriteCard({
 }) {
   return (
     <div className="bg-white rounded-3xl w-full shadow-md overflow-hidden hover:shadow-xl transition duration-300 p-4 sm:p-5">
-      {recipe.imageUrl && (
+      {displayImage(recipe) && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={recipe.imageUrl} alt={recipe.recipeName} className="w-full aspect-video object-cover rounded-2xl mb-3" />
+        <img src={displayImage(recipe)} alt={recipe.recipeName} className="w-full aspect-video object-cover rounded-2xl mb-3" />
       )}
       <div className="flex justify-between items-start gap-2">
         <Link

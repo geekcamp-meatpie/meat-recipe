@@ -186,3 +186,10 @@ def test_extract_image_skips_text_parts():
 def test_extract_image_raises_when_no_image(resp):
     with pytest.raises(AIServiceError):
         recipe_image_client._extract_image(resp)
+
+
+def test_prompt_endpoint_returns_prompt_without_api_key():
+    app_config.api_key = ""
+    res = client.post("/api/recipe-image-prompt", json=BODY)
+    assert res.status_code == 200
+    assert res.json() == {"prompt": build_recipe_image_prompt(BODY["recipeName"], BODY["ingredients"])}

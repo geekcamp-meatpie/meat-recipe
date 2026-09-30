@@ -1,9 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { isFavorite, toggleFavorite } from "@/lib/favorites";
+import { useEffect, useRef, useState } from "react";
+import { displayImage, isFavorite, setFavoriteUserImage, toggleFavorite } from "@/lib/favorites";
 import { addHistory } from "@/lib/history";
+import { resizeImageToDataUrl } from "@/lib/image";
 
 interface Recipe {
   recipeName: string;
@@ -14,13 +15,21 @@ interface Recipe {
   point: string;
   warnings?: { warningIngredient: string; warningReason: string }[];
   imageUrl?: string;
+  userImageUrl?: string;
 }
+
+// ask: 生成するか確認中 / generating: 生成中 / failed: 生成失敗 / declined: 生成せず、Geminiアプリ用のプロンプトを表示
+type ImageState = "ask" | "generating" | "failed" | "declined";
 
 export default function RecipeDetailPage() {
   const router = useRouter();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [favorite, setFavorite] = useState(false);
-  const [imageFailed, setImageFailed] = useState(false);
+  const [imageState, setImageState] = useState<ImageState>("ask");
+  const [imageMessage, setImageMessage] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [copied, setCopied] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const stored = sessionStorage.getItem("selectedRecipe");
@@ -32,58 +41,209 @@ export default function RecipeDetailPage() {
     }
   }, []);
 
-  // 一覧で画像の生成が間に合わないうちにタップされた場合は、ここで取得する（生成済みなら再利用される）
-  const recipeName = recipe?.recipeName;
-  const hasImage = !!recipe?.imageUrl;
-  const ingredientsKey = recipe?.ingredients.join("\n");
-  useEffect(() => {
-    if (!recipeName || hasImage) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/generate-recipe-image", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ recipeName, ingredients: ingredientsKey?.split("\n") ?? [] }),
-        });
-        const imageUrl = res.ok ? (await res.json()).imageUrl : undefined;
-        if (cancelled) return;
-        if (imageUrl) setRecipe((prev) => (prev ? { ...prev, imageUrl } : prev));
-        else setImageFailed(true);
-      } catch {
-        if (!cancelled) setImageFailed(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [recipeName, hasImage, ingredientsKey]);
-
   if (!recipe) {
     return <div className="text-center py-16">レシピが見つかりません</div>;
   }
 
+  const image = displayImage(recipe);
+
+  // 画像は毎回ユーザーに確認してから生成する（1枚ずつ）
+  const generateImage = async () => {
+    setImageState("generating");
+    setImageMessage("");
+    try {
+      const res = await fetch("/api/generate-recipe-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recipeName: recipe.recipeName, ingredients: recipe.ingredients }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.detail || "画像の生成に失敗しました。");
+      }
+      const { imageUrl } = await res.json();
+      if (!imageUrl) throw new Error("画像の生成に失敗しました。");
+      setRecipe((prev) => (prev ? { ...prev, imageUrl } : prev));
+    } catch (err) {
+      setImageMessage(err instanceof Error ? err.message : "画像の生成に失敗しました。");
+      setImageState("failed");
+    }
+  };
+
+  // 生成しない場合は、Geminiアプリに貼り付けるプロンプトを表示する
+  const declineGeneration = async () => {
+    setImageState("declined");
+    setCopied(false);
+    try {
+      const res = await fetch("/api/recipe-image-prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recipeName: recipe.recipeName, ingredients: recipe.ingredients }),
+      });
+      if (!res.ok) throw new Error();
+      setPrompt((await res.json()).prompt);
+    } catch {
+      setPrompt(`料理「${recipe.recipeName}」の完成イメージ写真を生成してください。`);
+    }
+  };
+
+  const copyPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopied(true);
+    } catch {
+      setImageMessage("コピーできませんでした。テキストを長押しして選択してください。");
+    }
+  };
+
+  // 写真フォルダから選んだ画像を縮小して付ける。お気に入り済みなら保存内容も更新する
+  const handlePickPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // 同じファイルを選び直しても onChange が発火するようにする
+    if (!file) return;
+    try {
+      const userImageUrl = await resizeImageToDataUrl(file);
+      setRecipe({ ...recipe, userImageUrl });
+      if (!setFavoriteUserImage(recipe.recipeName, userImageUrl)) {
+        setImageMessage("写真を保存できませんでした（保存容量の上限）。");
+      } else {
+        setImageMessage("");
+      }
+    } catch {
+      setImageMessage("画像を読み込めませんでした。別の画像を選んでください。");
+    }
+  };
+
+  const removePhoto = () => {
+    setRecipe({ ...recipe, userImageUrl: undefined });
+    setFavoriteUserImage(recipe.recipeName, undefined);
+    setImageMessage("");
+  };
+
+  const buttonStyle = { border: "1px solid var(--color-accent)", color: "var(--color-accent)" };
+
   return (
     <div className="px-5 pt-6 space-y-5">
-      {recipe.imageUrl ? (
+      {image ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={recipe.imageUrl}
+          src={image}
           alt={recipe.recipeName}
           className="w-full aspect-square sm:aspect-video object-cover rounded-3xl shadow-md"
         />
       ) : (
         <div
-          className={`w-full aspect-square sm:aspect-video rounded-3xl flex items-center justify-center text-6xl ${
-            imageFailed ? "" : "animate-pulse"
-          }`}
+          className="w-full rounded-3xl p-5 flex flex-col items-center justify-center gap-3 text-center"
           style={{ background: "var(--color-hero-start)" }}
         >
-          🍽️
+          <span className={`text-6xl ${imageState === "generating" ? "animate-pulse" : ""}`}>🍽️</span>
+
+          {imageState === "ask" && (
+            <>
+              <p className="text-sm font-bold">料理のイメージ画像を生成しますか？</p>
+              <div className="flex flex-wrap justify-center gap-2">
+                <button
+                  className="rounded-xl px-5 py-2 text-sm font-bold text-white"
+                  style={{ background: "var(--color-accent)" }}
+                  onClick={generateImage}
+                >
+                  生成する
+                </button>
+                <button
+                  className="rounded-xl px-5 py-2 text-sm font-bold bg-white"
+                  style={buttonStyle}
+                  onClick={declineGeneration}
+                >
+                  生成しない
+                </button>
+              </div>
+            </>
+          )}
+
+          {imageState === "generating" && (
+            <p className="text-sm" style={{ color: "var(--color-text-sub)" }}>
+              画像を生成中...
+            </p>
+          )}
+
+          {imageState === "failed" && (
+            <>
+              <p className="text-sm text-red-600">{imageMessage || "画像の生成に失敗しました。"}</p>
+              <div className="flex flex-wrap justify-center gap-2">
+                <button
+                  className="rounded-xl px-5 py-2 text-sm font-bold text-white"
+                  style={{ background: "var(--color-accent)" }}
+                  onClick={generateImage}
+                >
+                  もう一度生成する
+                </button>
+                <button
+                  className="rounded-xl px-5 py-2 text-sm font-bold bg-white"
+                  style={buttonStyle}
+                  onClick={declineGeneration}
+                >
+                  Geminiアプリで作る
+                </button>
+              </div>
+            </>
+          )}
+
+          {imageState === "declined" && (
+            <div className="w-full space-y-2 text-left">
+              <p className="text-xs" style={{ color: "var(--color-text-sub)" }}>
+                Geminiアプリに下のプロンプトを貼り付けると、画像を作れます。できた画像は、下の「写真から選ぶ」で追加できます。
+              </p>
+              <textarea
+                readOnly
+                value={prompt}
+                className="w-full h-36 rounded-xl p-3 text-xs bg-white resize-none"
+                onFocus={(e) => e.currentTarget.select()}
+              />
+              <div className="flex flex-wrap gap-2">
+                <button
+                  className="rounded-xl px-5 py-2 text-sm font-bold text-white"
+                  style={{ background: "var(--color-accent)" }}
+                  onClick={copyPrompt}
+                  disabled={!prompt}
+                >
+                  {copied ? "コピーしました ✓" : "プロンプトをコピー"}
+                </button>
+                <button
+                  className="rounded-xl px-5 py-2 text-sm font-bold bg-white"
+                  style={buttonStyle}
+                  onClick={() => setImageState("ask")}
+                >
+                  やっぱり生成する
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
+      {/* 写真フォルダから料理の画像を追加する（capture を付けないので、撮影ではなくアルバム/ファイル選択が開く） */}
+      <div className="flex flex-wrap items-center gap-2">
+        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handlePickPhoto} />
+        <button
+          className="rounded-xl px-4 py-2 text-xs font-bold bg-white"
+          style={buttonStyle}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          🖼️ 写真から選ぶ
+        </button>
+        {recipe.userImageUrl && (
+          <button className="text-xs underline" style={{ color: "var(--color-text-muted)" }} onClick={removePhoto}>
+            選んだ写真を外す
+          </button>
+        )}
+        {image && imageMessage && <span className="text-xs text-red-600">{imageMessage}</span>}
+      </div>
+
       <h1 className="text-lg font-bold">{recipe.recipeName}</h1>
+
+      <p className="text-[11px]" style={{ color: "var(--color-text-muted)" }}>
+        ※ AIが提案したレシピです。分量や手順は目安としてご利用ください。
+      </p>
 
       <div className="flex gap-3 text-[11px]" style={{ color: "var(--color-text-muted)" }}>
         <span>⏱ {recipe.cookingTime}分</span>

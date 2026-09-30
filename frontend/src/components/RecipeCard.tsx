@@ -5,11 +5,9 @@ export interface RecipeCardData {
   cookingTime: number;
   difficulty: string;
   ingredients: string[];
-  imageUrl?: string;
-  imageFailed?: boolean;
 }
 
-// お気に入りカード（FavoriteCard）と同じ見た目で、左に詳細・右に画像を並べたレシピ提案用カード
+// お気に入りカード（FavoriteCard）と同じ見た目で、左に詳細・右に画像枠を並べたレシピ提案用カード
 export default function RecipeCard({ recipe, onClick }: { recipe: RecipeCardData; onClick: () => void }) {
   return (
     <button
@@ -30,17 +28,10 @@ export default function RecipeCard({ recipe, onClick }: { recipe: RecipeCardData
         </div>
       </div>
       <div
-        className={`w-28 h-28 sm:w-36 sm:h-36 shrink-0 rounded-2xl overflow-hidden flex items-center justify-center text-3xl ${
-          recipe.imageUrl || recipe.imageFailed ? "" : "animate-pulse"
-        }`}
+        className="w-28 h-28 sm:w-36 sm:h-36 shrink-0 rounded-2xl flex items-center justify-center text-3xl"
         style={{ background: "var(--color-hero-start)" }}
       >
-        {recipe.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={recipe.imageUrl} alt={recipe.recipeName} className="w-full h-full object-cover" />
-        ) : (
-          "🍽️"
-        )}
+        🍽️
       </div>
     </button>
   );

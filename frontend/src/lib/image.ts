@@ -1,0 +1,18 @@
+const MAX_SIDE = 800;
+
+/**
+ * 写真フォルダから選んだ画像を縮小してJPEGのdata URLにする。
+ * お気に入りはlocalStorage（容量約5MB）に保存するため、元画像のまま入れると数枚で溢れる。
+ */
+export async function resizeImageToDataUrl(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("画像を処理できませんでした。");
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  return canvas.toDataURL("image/jpeg", 0.8);
+}

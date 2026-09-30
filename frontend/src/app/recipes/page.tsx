@@ -11,8 +11,6 @@ interface Recipe {
   ingredients: string[];
   steps: string[];
   point: string;
-  imageUrl?: string;
-  imageFailed?: boolean;
 }
 
 function RecipesContent() {
@@ -25,31 +23,8 @@ function RecipesContent() {
   const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
-    // 条件変更・再試行・画面遷移で古い画像取得の結果が反映されないようにする
+    // 条件変更・再試行・画面遷移で古い取得結果が反映されないようにする
     let cancelled = false;
-
-    // レシピ1件分の料理イメージ画像を取得し、届いた順にカードへ反映する。失敗しても🍽️のまま表示する
-    const fetchImage = async (recipe: Recipe) => {
-      try {
-        const res = await fetch("/api/generate-recipe-image", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ recipeName: recipe.recipeName, ingredients: recipe.ingredients }),
-        });
-        const imageUrl = res.ok ? (await res.json()).imageUrl : undefined;
-        if (cancelled) return;
-        setRecipes((prev) =>
-          prev.map((r) =>
-            r.recipeName === recipe.recipeName ? (imageUrl ? { ...r, imageUrl } : { ...r, imageFailed: true }) : r
-          )
-        );
-      } catch {
-        // 画像は付加要素なので、エラーは表示せず🍽️のまま表示する
-        if (!cancelled) {
-          setRecipes((prev) => prev.map((r) => (r.recipeName === recipe.recipeName ? { ...r, imageFailed: true } : r)));
-        }
-      }
-    };
 
     const fetchRecipes = async () => {
       setLoading(true);
@@ -80,7 +55,6 @@ function RecipesContent() {
         const data = await res.json();
         if (cancelled) return;
         setRecipes(data.recipes);
-        data.recipes.forEach(fetchImage);
       } catch (err) {
         setError(err instanceof Error ? err.message : "エラーが発生しました");
       } finally {
@@ -140,16 +114,7 @@ function RecipesContent() {
             key={recipe.recipeName}
             recipe={recipe}
             onClick={() => {
-              const { imageFailed, ...selected } = recipe;
-              void imageFailed;
-              try {
-                sessionStorage.setItem("selectedRecipe", JSON.stringify(selected));
-              } catch {
-                // 画像(data URL)が大きくて保存できない場合は画像なしで渡す（詳細画面側で再取得する）
-                const { imageUrl, ...withoutImage } = selected;
-                void imageUrl;
-                sessionStorage.setItem("selectedRecipe", JSON.stringify(withoutImage));
-              }
+              sessionStorage.setItem("selectedRecipe", JSON.stringify(recipe));
               router.push("/recipes/detail");
             }}
           />
