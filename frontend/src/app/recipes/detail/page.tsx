@@ -1,10 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { useAuth } from "@/components/AuthProvider";
 import { displayImage, isFavorite, setFavoriteUserImage, toggleFavorite } from "@/lib/favorites";
 import { addHistory } from "@/lib/history";
 import { resizeImageToDataUrl } from "@/lib/image";
+import { supabase } from "@/lib/supabase";
 
 interface Recipe {
   recipeName: string;
@@ -16,6 +19,13 @@ interface Recipe {
   warnings?: { warningIngredient: string; warningReason: string }[];
   imageUrl?: string;
   userImageUrl?: string;
+}
+
+/** ログイン中のアクセストークンを Authorization ヘッダーにして返す（未ログインなら空） */
+async function authHeaders(): Promise<Record<string, string>> {
+  const { data } = (await supabase?.auth.getSession()) ?? { data: null };
+  const token = data?.session?.access_token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 // ask: 生成するか確認中 / generating: 生成中 / failed: 生成失敗 / declined: 生成せず、Geminiアプリ用のプロンプトを表示
@@ -30,6 +40,9 @@ export default function RecipeDetailPage() {
   const [prompt, setPrompt] = useState("");
   const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { user } = useAuth();
+  // 今日あと何枚生成できるか（ログイン中のみ。取得できない間は null）
+  const [remaining, setRemaining] = useState<number | null>(null);
 
   useEffect(() => {
     const stored = sessionStorage.getItem("selectedRecipe");
@@ -40,6 +53,28 @@ export default function RecipeDetailPage() {
       addHistory(r);
     }
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setRemaining(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const headers = await authHeaders();
+        const res = await fetch("/api/image-quota", { headers });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) setRemaining(data.remaining);
+      } catch {
+        // 残り枚数は補助表示なので、取得できなくても画面は動かす
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   if (!recipe) {
     return <div className="text-center py-16">レシピが見つかりません</div>;
@@ -54,15 +89,16 @@ export default function RecipeDetailPage() {
     try {
       const res = await fetch("/api/generate-recipe-image", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
         body: JSON.stringify({ recipeName: recipe.recipeName, ingredients: recipe.ingredients }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => null);
         throw new Error(err?.detail || "画像の生成に失敗しました。");
       }
-      const { imageUrl } = await res.json();
+      const { imageUrl, remaining: left } = await res.json();
       if (!imageUrl) throw new Error("画像の生成に失敗しました。");
+      if (typeof left === "number") setRemaining(left);
       setRecipe((prev) => (prev ? { ...prev, imageUrl } : prev));
     } catch (err) {
       setImageMessage(err instanceof Error ? err.message : "画像の生成に失敗しました。");
@@ -138,14 +174,20 @@ export default function RecipeDetailPage() {
         >
           <span className={`text-6xl ${imageState === "generating" ? "animate-pulse" : ""}`}>🍽️</span>
 
-          {imageState === "ask" && (
+          {imageState === "ask" && user && (
             <>
               <p className="text-sm font-bold">料理のイメージ画像を生成しますか？</p>
+              {remaining !== null && (
+                <p className="text-[11px]" style={{ color: "var(--color-text-sub)" }}>
+                  今日の残り: {remaining}枚
+                </p>
+              )}
               <div className="flex flex-wrap justify-center gap-2">
                 <button
-                  className="rounded-xl px-5 py-2 text-sm font-bold text-white"
+                  className="rounded-xl px-5 py-2 text-sm font-bold text-white disabled:opacity-50"
                   style={{ background: "var(--color-accent)" }}
                   onClick={generateImage}
+                  disabled={remaining === 0}
                 >
                   生成する
                 </button>
@@ -155,6 +197,36 @@ export default function RecipeDetailPage() {
                   onClick={declineGeneration}
                 >
                   生成しない
+                </button>
+              </div>
+              {remaining === 0 && (
+                <p className="text-[11px] text-red-600">
+                  本日の画像生成の上限に達しました。Geminiアプリで作ることもできます。
+                </p>
+              )}
+            </>
+          )}
+
+          {imageState === "ask" && !user && (
+            <>
+              <p className="text-sm font-bold">料理のイメージ画像</p>
+              <p className="text-[11px]" style={{ color: "var(--color-text-sub)" }}>
+                画像の生成はログインすると使えます（設定画面からログインできます）。
+              </p>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Link
+                  href="/settings"
+                  className="rounded-xl px-5 py-2 text-sm font-bold text-white"
+                  style={{ background: "var(--color-accent)" }}
+                >
+                  ログインする
+                </Link>
+                <button
+                  className="rounded-xl px-5 py-2 text-sm font-bold bg-white"
+                  style={buttonStyle}
+                  onClick={declineGeneration}
+                >
+                  Geminiアプリで作る
                 </button>
               </div>
             </>
@@ -213,7 +285,7 @@ export default function RecipeDetailPage() {
                   style={buttonStyle}
                   onClick={() => setImageState("ask")}
                 >
-                  やっぱり生成する
+                  {user ? "やっぱり生成する" : "戻る"}
                 </button>
               </div>
             </div>

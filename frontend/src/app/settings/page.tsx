@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useAuth } from "@/components/AuthProvider";
 
 export default function SettingsPage() {
   const [apiKey, setApiKey] = useState("");
@@ -8,6 +9,17 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [medicines, setMedicines] = useState<string[]>([]);
   const [newMedicine, setNewMedicine] = useState("");
+  const { user, loading: authLoading, available, signInWithGoogle, signOut } = useAuth();
+  const [authError, setAuthError] = useState("");
+
+  const handleSignIn = async () => {
+    setAuthError("");
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : "ログインを開始できませんでした。");
+    }
+  };
 
   useEffect(() => {
     fetch("/api/settings")
@@ -47,6 +59,50 @@ export default function SettingsPage() {
   return (
     <div className="px-5 pt-6 space-y-6">
       <h1 className="text-lg font-bold">設定</h1>
+
+      {/* アカウント（ログインは任意） */}
+      <div
+        className="rounded-2xl p-4 space-y-3"
+        style={{ background: "var(--color-card)", boxShadow: "0 1px 6px rgba(0,0,0,0.06)" }}
+      >
+        <h2 className="text-sm font-bold">アカウント</h2>
+        {!available ? (
+          <p className="text-[11px]" style={{ color: "var(--color-text-muted)" }}>
+            ログイン機能は設定されていません（Supabaseの環境変数が未設定です）。
+          </p>
+        ) : authLoading ? (
+          <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>
+            確認中...
+          </p>
+        ) : user ? (
+          <>
+            <p className="text-xs">
+              ログイン中: <span className="font-semibold">{user.email}</span>
+            </p>
+            <button
+              className="w-full rounded-xl p-3 text-sm font-bold transition"
+              style={{ border: "1px solid var(--color-accent)", color: "var(--color-accent)" }}
+              onClick={signOut}
+            >
+              ログアウト
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="text-[11px]" style={{ color: "var(--color-text-muted)" }}>
+              ログインは任意です。ログインしなくても、これまでどおり使えます。
+            </p>
+            <button
+              className="w-full rounded-xl p-3 text-sm font-bold transition"
+              style={{ background: "#fff", border: "1px solid var(--color-border)" }}
+              onClick={handleSignIn}
+            >
+              Googleでログイン
+            </button>
+            {authError && <p className="text-xs text-red-600">{authError}</p>}
+          </>
+        )}
+      </div>
 
       {/* APIキー設定 */}
       <div
