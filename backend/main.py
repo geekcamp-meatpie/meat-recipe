@@ -4,7 +4,7 @@ from sqlalchemy import text
 
 from db.client import engine
 from db.models import Base
-from routers import analyze_ingredients, recipe_image, recipes, settings
+from routers import account, analyze_ingredients, recipe_image, recipes, settings
 
 app = FastAPI(title="Want Cooking API")
 
@@ -20,6 +20,7 @@ app.include_router(recipes.router, prefix="/api")
 app.include_router(settings.router, prefix="/api")
 app.include_router(analyze_ingredients.router, prefix="/api")
 app.include_router(recipe_image.router, prefix="/api")
+app.include_router(account.router, prefix="/api")
 
 #起動イベント方式で書いてます。起動処理だけで、終了処理は書く必要がない。
 #なにかしら起動したときに常時接続するものがある場合はlifespan方式で書くのが良い。
