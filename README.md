@@ -29,7 +29,7 @@
 - Node.js（フロント）
 - **Python 3.11〜3.13**。3.14では `pydantic` や `psycopg2-binary` のビルド済みwheelが無く `pip install` が失敗する
 - Supabaseプロジェクト（ログイン・DB・画像保存を使う場合。無くても起動と基本のレシピ提案は動く）
-- Gemini APIキー（[Google AI Studio](https://aistudio.google.com/) で取得）
+- Gemini APIキー（[Google AI Studio](https://aistudio.google.com/) で取得）。**サーバーの設定ファイルには書かず、アプリの設定画面で入力する**（各ユーザーが自分のキーを使い、キーはそのブラウザにだけ保存される）
 
 ### 1. バックエンド
 
@@ -48,14 +48,15 @@ uvicorn main:app --reload
 
 | 変数 | 内容 |
 |------|------|
-| `GEMINI_API_KEY` | Geminiのキー。設定画面で保存したキーがあればそちらが優先される |
 | `SUPABASE_URL` | `https://<プロジェクトID>.supabase.co` |
 | `SUPABASE_API` | Supabaseの **service_role キー**（ログイン検証・退会・Storage保存に使う）。**バックエンドの `.env` にだけ置き、フロントやgitには絶対に入れない** |
-| `DATABASE_URL` | SupabaseのPostgreSQL接続文字列（画像生成の上限管理・設定の永続化に使う） |
+| `DATABASE_URL` | SupabaseのPostgreSQL接続文字列（画像生成の上限管理に使う） |
 | `SUPABASE_IMAGE_BUCKET` | 画像の保存先バケット名（既定 `recipe-images`。公開バケットとして作成しておく） |
 | `IMAGE_DAILY_LIMIT` | 1ユーザーが1日（日本時間）に生成できる画像枚数（既定10） |
 
-`DATABASE_URL` などが未設定でも起動は継続する（DB無しでも動く設計）。ただしDB未接続の間は、画像生成は上限を管理できないため無効になり、設定はメモリ上にのみ保持される。
+`DATABASE_URL` などが未設定でも起動は継続する（DB無しでも動く設計）。ただしDB未接続の間は、画像生成は上限を管理できないため無効になる。
+
+AIのAPIキー・プロバイダ・服用中の薬は、サーバー（`.env`・DB）には一切保存しない。設定画面で入力するとブラウザの localStorage にだけ保存され、AIを使うAPI（レシピ提案・食材認識・画像生成）を呼ぶたびに、ヘッダー `X-AI-API-Key` / `X-AI-Provider`（薬はリクエスト本文の `medicines`）で送る。サーバーは受け取ったキーをそのリクエストの間だけ使い、保存もログ出力もしない（`backend/services/ai_credentials.py`）。
 
 ### 2. フロントエンド
 
@@ -132,13 +133,12 @@ meat-recipe/
 │
 └── backend/                         ← FastAPI + Python
     ├── main.py                      ← エントリーポイント（CORS・ルーター登録・起動時のテーブル作成）
-    ├── config.py                    ← 環境変数の読み込みと、メモリ上の設定（APIキー・プロバイダ・薬）
+    ├── config.py                    ← 環境変数の読み込み
     ├── db/                          ← client.py（DB接続。未設定ならNone）、models.py
     ├── routers/
     │   ├── recipes.py               ← レシピ提案
     │   ├── analyze_ingredients.py   ← 写真からの食材認識
     │   ├── recipe_image.py          ← 料理画像の生成・上限確認・プロンプト取得
-    │   ├── settings.py              ← 設定の取得・保存
     │   └── account.py               ← 退会
     ├── services/
     │   ├── prompt_builder.py        ← レシピ提案プロンプトの組み立て（モード・お好み・薬）
@@ -167,10 +167,9 @@ meat-recipe/
 | メソッド | パス | 認証 | 用途 |
 |----------|------|------|------|
 | GET | `/` | - | ヘルスチェック |
-| GET/POST | `/api/settings` | なし | APIキー・プロバイダ・薬リストの取得／保存 |
-| POST | `/api/suggest-recipes` | なし | 食材＋モード＋お好みからレシピ3〜5件を生成（薬の警告付き） |
-| POST | `/api/analyze-ingredients` | なし | 写真（最大3枚・1枚5MB・JPEG/PNG/WebP）から食材を抽出 |
-| POST | `/api/generate-recipe-image` | 要ログイン | 料理画像を1枚生成しStorageへ保存。同名レシピは保存済みを再利用。1日 `IMAGE_DAILY_LIMIT` 枚まで |
+| POST | `/api/suggest-recipes` | AIキー（ヘッダー） | 食材＋モード＋お好み＋薬からレシピ3〜5件を生成（薬の警告付き） |
+| POST | `/api/analyze-ingredients` | AIキー（ヘッダー） | 写真（最大3枚・1枚5MB・JPEG/PNG/WebP）から食材を抽出 |
+| POST | `/api/generate-recipe-image` | 要ログイン＋AIキー（ヘッダー） | 料理画像を1枚生成しStorageへ保存。同名レシピは保存済みを再利用。1日 `IMAGE_DAILY_LIMIT` 枚まで |
 | GET | `/api/image-quota` | 要ログイン | 今日の画像生成の残り枚数 |
 | POST | `/api/recipe-image-prompt` | なし | 画像を生成しない人向けに、Geminiアプリへ貼るプロンプトを返す |
 | DELETE | `/api/account` | 要ログイン | 退会（Supabase Authのユーザー削除＋利用回数の削除） |
@@ -189,27 +188,29 @@ meat-recipe/
 | お気に入り | 未実装プレースホルダー | 実装済み。ログイン中はSupabase、未ログインはlocalStorage。初回ログイン時に端末内のお気に入りを移行 |
 | 記録（履歴）画面 | 画面一覧に無し | **追加**（`/record`）。閲覧したレシピを端末内に最大50件 |
 | 退会・プライバシーポリシー | 想定なし | **追加**。設定画面から退会でき、`/privacy` にポリシーを掲載 |
-| 薬管理 | 独立した画面。`/api/medicines` でCRUD | 設定画面に統合。専用APIは作らず `/api/settings` に薬リストを含めた。レシピ提案時にプロンプトへ渡し、`warnings` として返す |
-| DB | 設定の永続化とレシピseed用 | 設定（`app_settings`）・画像の利用回数（`image_usage`）はバックエンド、お気に入りはSupabaseへフロントから直接。レシピseed用テーブルは使われていない |
+| 薬管理 | 独立した画面。`/api/medicines` でCRUD | 設定画面に統合。専用APIは作らず、薬リストはブラウザに保存してレシピ提案のリクエストに含める。プロンプトへ渡し、`warnings` として返す |
+| AIのAPIキー | サーバーの環境変数または設定APIで保存 | **サーバーには保存しない**。各ユーザーが設定画面で自分のキーを入力し、ブラウザ（localStorage）に保存。リクエストごとにヘッダーで送る。運営がキーを預からないため、公開しても課金や漏洩のリスクが小さい |
+| DB | 設定の永続化とレシピseed用 | 画像の利用回数（`image_usage`）はバックエンド、お気に入りはSupabaseへフロントから直接。レシピseed用テーブルは使われていない |
 | API呼び出し | 各ページで `http://localhost:8000` を直書き | `/api` へのrewritesに統一（スマホなどLAN内の端末からポート3000だけで使える） |
-| テスト | 無し | バックエンドにpytestを追加（レシピ提案・食材認識・画像生成・設定・退会） |
+| テスト | 無し | バックエンドにpytestを追加（レシピ提案・食材認識・画像生成・退会） |
 | スマホアプリ化（Capacitor.js） | Web完成後に着手 | 未着手 |
 
 ---
 
 ## 現時点で修正する余地があるところ
 
-### 公開前に必ず対応したい（セキュリティ）
+### 公開前に対応したい（セキュリティ）
 
-- **`/api/settings` に認証が無く、全ユーザーで1つの設定を共有している。** APIキー・プロバイダ・薬リストは、ユーザーごとではなくサーバー全体で1件（`app_settings` の `id=1`）を持つ。`GET` はAPIキーをそのまま返し、誰でも書き換えられる。薬は健康情報でもある。複数人が使う環境に置く前に、ログインユーザーごとの保存＋認証、またはキーをサーバーの環境変数だけにしてAPIから返さない形へ変更が必要
-- **`/api/suggest-recipes` と `/api/analyze-ingredients` も認証・回数制限が無い。** 上記の共有キーでGeminiが呼べるため、公開すると誰でも課金を発生させられる。画像生成にあるログイン必須＋1日上限と同様の制御が要る
+- **DBに古いAPIキーが残っている可能性がある。** 以前の実装は、設定画面で入力したキーを `app_settings` テーブル（`id=1`）に暗号化せず保存していた。現在のコードは使わないが、テーブルと中身は残っている。Supabaseの SQL Editor で `drop table if exists app_settings;` を実行して消し、過去にそこへ保存したGeminiキーは（念のため）再発行すること
+- **`/api/suggest-recipes` と `/api/analyze-ingredients` に認証・回数制限が無い。** キーは各ユーザーのものなので運営に課金は発生しないが、誰でもサーバーを経由してGeminiを呼べる。負荷対策として、IPごとの回数制限などを検討する
+- **キーはブラウザの localStorage にある。** サイト側にXSSの脆弱性ができると読み取られる。ユーザー入力をそのままHTMLとして出さないこと、共有PCで入力しないこと（設定画面に注意書きあり）を守る
 
 ### 不具合・整合性
 
 - **`test_analyze_ingredients.py::test_total_size_too_large` が失敗する。** 上限を5枚→3枚に変えたため、「合計20MB」に達する前に枚数超過（400）で弾かれ、テストの期待する413にならない。合計サイズの上限（15MB以下にしか達しない）かテストのどちらかを直す
 - **`/confirm` `/mode` `/recipes` `/recipes/detail` を直接開いたときのガードが無い。** クエリや `sessionStorage` が空でも画面が開き、食材が空のままAPIを呼ぶ／空の画面になる。ホームへ戻す処理を入れたい（Issue #6の残り）
 - **Claude側の実装が古く未検証。** モデルIDが `claude-3-5-sonnet-20241022` のままで、`response_schema` 相当の形式強制が無い。画像生成・食材認識はGeminiのみ対応
-- **DBの定義が2か所に分かれている。** バックエンドのテーブル（`app_settings` / `image_usage`）は起動時の `create_all`、お気に入りは `supabase/migrations/` のSQLを手動実行。マイグレーション管理（Alembic等）を導入するか、運用ルールを決めたい
+- **DBの定義が2か所に分かれている。** バックエンドのテーブル（`image_usage`）は起動時の `create_all`、お気に入りは `supabase/migrations/` のSQLを手動実行。マイグレーション管理（Alembic等）を導入するか、運用ルールを決めたい
 - **退会しても料理画像はStorageに残る。** 画像はレシピ名をキーに全ユーザーで共有しているため意図的だが、方針としてプライバシーポリシーに書くかどうか確認したい
 
 ### 未実装・未着手

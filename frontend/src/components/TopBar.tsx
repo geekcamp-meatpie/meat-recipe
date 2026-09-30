@@ -13,7 +13,7 @@ export default function TopBar() {
         className="text-xl font-extrabold tracking-tight"
         style={{ color: "var(--color-accent)" }}
       >
-        Want <span style={{ color: "var(--color-text)" }}>Cooking</span>
+        Meat <span style={{ color: "var(--color-text)" }}>Recipe</span>
       </Link>
 
       <div className="flex gap-3">

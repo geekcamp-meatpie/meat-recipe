@@ -40,17 +40,6 @@ class RecipeIngredient(Base):
     recipe = relationship("Recipe", back_populates="ingredients")
 
 
-class AppSettings(Base):
-    """Issue #4: APIキー・薬情報などアプリ設定の永続化用テーブル（常に単一行 id=1 を使用）。"""
-
-    __tablename__ = "app_settings"
-
-    id = Column(Integer, primary_key=True)
-    api_key = Column(String, nullable=False, default="")
-    provider = Column(String, nullable=False, default="gemini")
-    medicines = Column(Text, nullable=False, default="[]")  # JSON文字列としてリストを保持
-
-
 class ImageUsage(Base):
     """画像生成の利用回数（ユーザー×日本時間の日付ごと）。1日の上限チェックに使う。
 

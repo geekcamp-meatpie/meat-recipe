@@ -3,14 +3,12 @@
 """
 
 import json
-import os
 from typing import List
 
 from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
 
-from config import app_config
 from services.image_prompt_builder import build_image_prompt
 
 
@@ -24,30 +22,16 @@ class IngredientResponse(BaseModel):
     ingredients: List[IngredientDetection]
 
 
-def has_api_key() -> bool:
-    return bool(app_config.api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
-
-
-def _get_client() -> genai.Client:
-    """Geminiクライアントを初期化する。
-    設定画面（/api/settings）で保存されたAPIキーがあればそれを使い、
-    無ければSDKのデフォルト挙動に従い環境変数（GEMINI_API_KEY等）から読み込む。
-    リクエストごとに生成することで、設定画面でのキー変更を即座に反映する。
-    """
-    if app_config.api_key:
-        return genai.Client(api_key=app_config.api_key)
-    return genai.Client()
-
-
-async def analyze_image_ai(images: list[tuple[bytes, str]]) -> list[dict]:
+async def analyze_image_ai(images: list[tuple[bytes, str]], api_key: str) -> list[dict]:
     """(画像バイナリ, MIMEタイプ) のリストを受け取り、検出した食材のリスト（name, amount, confidence）を返す。
-    複数枚は1回のリクエストにまとめて渡し、AI側で重複をまとめさせる。"""
+    複数枚は1回のリクエストにまとめて渡し、AI側で重複をまとめさせる。
+    api_key はリクエストごとにユーザーから受け取ったキー（サーバーには保存しない）。"""
     image_parts = [types.Part.from_bytes(data=data, mime_type=mime) for data, mime in images]
     prompt = build_image_prompt(len(image_parts))
 
     # 非同期エンドポイント内のため、同期版ではなく非同期版クライアントを使う
     # (同期版はイベントループ内で呼ぶとhttpxクライアントがクローズ済み扱いになり失敗する)
-    response = await _get_client().aio.models.generate_content(
+    response = await genai.Client(api_key=api_key).aio.models.generate_content(
         # gemini-2.5-flash は新規ユーザー向けに提供終了済み(404)のため、実APIキーで動作確認済みの
         # gemini-3.5-flash-lite を使用する。gemini-3.8-flash は動作するが高負荷時に503が頻発した。
         model="gemini-3.5-flash-lite",

@@ -2,7 +2,7 @@
 POST /api/analyze-ingredients のルーター単体テスト。
 
 Geminiの呼び出し自体は services/image_ai_client.py の責務なので、
-ここでは analyze_image / has_api_key をモックし、ルーター
+ここでは analyze_image をモックし、ルーター
 （analyze_ingredients.py）のリクエスト処理・レスポンス整形のみを検証する。
 """
 
@@ -20,7 +20,9 @@ FAKE_PNG_BYTES = base64.b64decode(
 
 app = FastAPI()
 app.include_router(analyze_ingredients.router, prefix="/api")
-client = TestClient(app)
+# APIキーはサーバーに保存せず、リクエストのヘッダーで受け取る
+client = TestClient(app, headers={"X-AI-API-Key": "test-key"})
+no_key_client = TestClient(app)
 
 
 def _png_file(name: str = "test.png"):
@@ -33,11 +35,10 @@ def test_success(monkeypatch):
         {"name": "玉ねぎ", "amount": "1個", "confidence": 0.8},
     ]
 
-    async def fake_analyze_image(images):
+    async def fake_analyze_image(images, api_key):
         assert images == [(FAKE_PNG_BYTES, "image/png")]
         return expected
 
-    monkeypatch.setattr(analyze_ingredients, "has_api_key", lambda: True)
     monkeypatch.setattr(analyze_ingredients, "analyze_image_ai", fake_analyze_image)
 
     response = client.post("/api/analyze-ingredients", files=[_png_file()])
@@ -55,11 +56,10 @@ def test_success(monkeypatch):
 def test_max_images_allowed(monkeypatch):
     received = {}
 
-    async def fake_analyze_image(images):
+    async def fake_analyze_image(images, api_key):
         received["count"] = len(images)
         return []
 
-    monkeypatch.setattr(analyze_ingredients, "has_api_key", lambda: True)
     monkeypatch.setattr(analyze_ingredients, "analyze_image_ai", fake_analyze_image)
 
     response = client.post(
@@ -72,7 +72,6 @@ def test_max_images_allowed(monkeypatch):
 
 
 def test_too_many_images(monkeypatch):
-    monkeypatch.setattr(analyze_ingredients, "has_api_key", lambda: True)
 
     response = client.post(
         "/api/analyze-ingredients",
@@ -84,7 +83,6 @@ def test_too_many_images(monkeypatch):
 
 
 def test_total_size_too_large(monkeypatch):
-    monkeypatch.setattr(analyze_ingredients, "has_api_key", lambda: True)
     # 1枚ずつは上限内だが、合計が上限を超える
     each = b"\x00" * analyze_ingredients.MAX_IMAGE_BYTES
     count = analyze_ingredients.MAX_TOTAL_BYTES // analyze_ingredients.MAX_IMAGE_BYTES + 1
@@ -99,7 +97,6 @@ def test_total_size_too_large(monkeypatch):
 
 
 def test_image_too_large(monkeypatch):
-    monkeypatch.setattr(analyze_ingredients, "has_api_key", lambda: True)
     too_big = b"\x00" * (analyze_ingredients.MAX_IMAGE_BYTES + 1)
 
     response = client.post(
@@ -111,7 +108,6 @@ def test_image_too_large(monkeypatch):
 
 
 def test_invalid_file(monkeypatch):
-    monkeypatch.setattr(analyze_ingredients, "has_api_key", lambda: True)
 
     response = client.post(
         "/api/analyze-ingredients",
@@ -122,7 +118,6 @@ def test_invalid_file(monkeypatch):
 
 
 def test_unsupported_image_type(monkeypatch):
-    monkeypatch.setattr(analyze_ingredients, "has_api_key", lambda: True)
 
     response = client.post(
         "/api/analyze-ingredients",
@@ -132,20 +127,42 @@ def test_unsupported_image_type(monkeypatch):
     assert response.status_code == 400
 
 
-def test_missing_api_key(monkeypatch):
-    monkeypatch.setattr(analyze_ingredients, "has_api_key", lambda: False)
-
-    response = client.post("/api/analyze-ingredients", files=[_png_file()])
+def test_missing_api_key():
+    response = no_key_client.post("/api/analyze-ingredients", files=[_png_file()])
 
     assert response.status_code == 400
     assert "APIキー" in response.json()["detail"]
 
 
+def test_api_key_is_passed_to_ai(monkeypatch):
+    captured = {}
+
+    async def fake_analyze_image(images, api_key):
+        captured["api_key"] = api_key
+        return []
+
+    monkeypatch.setattr(analyze_ingredients, "analyze_image_ai", fake_analyze_image)
+
+    response = client.post("/api/analyze-ingredients", files=[_png_file()])
+
+    assert response.status_code == 200
+    assert captured["api_key"] == "test-key"
+
+
+def test_claude_provider_returns_400():
+    response = no_key_client.post(
+        "/api/analyze-ingredients",
+        files=[_png_file()],
+        headers={"X-AI-API-Key": "k", "X-AI-Provider": "claude"},
+    )
+
+    assert response.status_code == 400
+
+
 def test_ai_error_returns_500(monkeypatch):
-    async def fake_analyze_image(images):
+    async def fake_analyze_image(images, api_key):
         raise RuntimeError("Gemini APIエラー")
 
-    monkeypatch.setattr(analyze_ingredients, "has_api_key", lambda: True)
     monkeypatch.setattr(analyze_ingredients, "analyze_image_ai", fake_analyze_image)
 
     response = client.post("/api/analyze-ingredients", files=[_png_file()])

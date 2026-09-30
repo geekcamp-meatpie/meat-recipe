@@ -15,10 +15,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from config import IMAGE_DAILY_LIMIT, app_config
+from config import IMAGE_DAILY_LIMIT
 from db.client import get_db
 from services import image_quota, image_storage
 from services.ai_client import AIServiceError
+from services.ai_credentials import AICredentials, get_gemini_credentials
 from services.auth import get_current_user_id
 from services.recipe_image_client import generate_recipe_image
 from services.recipe_image_prompt_builder import build_recipe_image_prompt
@@ -59,13 +60,8 @@ async def generate_recipe_image_endpoint(
     req: RecipeImageRequest,
     user_id: str = Depends(get_current_user_id),
     db: Session | None = Depends(get_db),
+    creds: AICredentials = Depends(get_gemini_credentials),  # Claudeは画像を生成できないためGeminiのみ
 ):
-    if not app_config.api_key:
-        raise HTTPException(status_code=400, detail="APIキーが設定されていません。設定画面からAPIキーを入力してください。")
-    if app_config.provider != "gemini":
-        # Claudeは画像を生成できない
-        raise HTTPException(status_code=400, detail="画像生成はGeminiのみ対応しています。")
-
     use_storage = image_storage.is_configured()
     key = image_storage.image_key(req.recipeName)
 
@@ -94,7 +90,7 @@ async def generate_recipe_image_endpoint(
             data, mime_type = await generate_recipe_image(
                 recipe_name=req.recipeName,
                 ingredients=req.ingredients,
-                api_key=app_config.api_key,
+                api_key=creds.api_key,
             )
     except AIServiceError as e:
         # 生成できなかった分は数えない

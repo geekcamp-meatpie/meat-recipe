@@ -4,11 +4,13 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 import { supabase } from "@/lib/supabase";
+import { getAiSettings, saveAiSettings, type AiProvider } from "@/lib/aiSettings";
 
 export default function SettingsPage() {
   const [apiKey, setApiKey] = useState("");
-  const [provider, setProvider] = useState<"gemini" | "claude">("gemini");
+  const [provider, setProvider] = useState<AiProvider>("gemini");
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [medicines, setMedicines] = useState<string[]>([]);
   const [newMedicine, setNewMedicine] = useState("");
   const { user, loading: authLoading, available, signInWithGoogle, signOut } = useAuth();
@@ -49,28 +51,22 @@ export default function SettingsPage() {
     }
   };
 
+  // localStorage はブラウザでしか使えないため、マウント後に読み込む
   useEffect(() => {
-    fetch("/api/settings")
-      .then((res) => res.json())
-      .then((data) => {
-        setApiKey(data.api_key || "");
-        setProvider(data.provider || "gemini");
-        setMedicines(data.medicines || []);
-      })
-      .catch(() => {});
+    const s = getAiSettings();
+    setApiKey(s.apiKey);
+    setProvider(s.provider);
+    setMedicines(s.medicines);
   }, []);
 
-  const handleSave = async () => {
+  const handleSave = () => {
+    setSaveError("");
     try {
-      await fetch("/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ api_key: apiKey, provider, medicines }),
-      });
+      saveAiSettings({ apiKey, provider, medicines });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-    } catch {
-      alert("保存に失敗しました。バックエンドが起動しているか確認してください。");
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "保存に失敗しました。");
     }
   };
 
@@ -232,6 +228,10 @@ export default function SettingsPage() {
               ? "Google AI Studio からAPIキーを取得してください"
               : "Anthropic Console からAPIキーを取得してください"}
           </p>
+          <p className="text-[10px] mt-1" style={{ color: "var(--color-text-muted)" }}>
+            APIキーはこの端末のブラウザにだけ保存され、サーバーには保存されません（AIに問い合わせるときだけ送信されます）。
+            共有のパソコンでは入力しないでください。
+          </p>
         </div>
       </div>
 
@@ -242,7 +242,7 @@ export default function SettingsPage() {
       >
         <h2 className="text-sm font-bold">服用中の薬（任意）</h2>
         <p className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>
-          登録すると、レシピ提案時に薬との相互作用を自動でチェックします。
+          登録すると、レシピ提案時に薬との相互作用を自動でチェックします。薬の情報もこの端末のブラウザにだけ保存されます。
         </p>
 
         <div className="flex flex-wrap gap-2">
@@ -286,6 +286,7 @@ export default function SettingsPage() {
       >
         {saved ? "✓ 保存しました" : "設定を保存"}
       </button>
+      {saveError && <p className="text-center text-xs text-red-500">{saveError}</p>}
 
       <p className="text-center text-[11px]">
         <Link href="/privacy" className="underline" style={{ color: "var(--color-text-muted)" }}>

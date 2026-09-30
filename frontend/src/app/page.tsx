@@ -10,6 +10,7 @@ const ingredientData: Record<string, string[]> = {
   その他: ["卵", "ご飯", "麺", "パン"],
 };
 import { useRouter } from "next/navigation";
+import { aiHeaders } from "@/lib/aiSettings";
 
 const MAX_IMAGES = 3;
 
@@ -70,6 +71,7 @@ export default function HomePage() {
       images.forEach((file) => formData.append("files", file));
       const res = await fetch("/api/analyze-ingredients", {
         method: "POST",
+        headers: aiHeaders(),
         body: formData,
       });
       if (!res.ok) {

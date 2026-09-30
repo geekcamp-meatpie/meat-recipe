@@ -3,6 +3,7 @@
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
 import RecipeCard from "@/components/RecipeCard";
+import { aiHeaders, getAiSettings } from "@/lib/aiSettings";
 
 interface Recipe {
   recipeName: string;
@@ -42,8 +43,8 @@ function RecipesContent() {
 
         const res = await fetch("/api/suggest-recipes", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(params),
+          headers: { "Content-Type": "application/json", ...aiHeaders() },
+          body: JSON.stringify({ ...params, medicines: getAiSettings().medicines }),
         });
 
         if (!res.ok) {
