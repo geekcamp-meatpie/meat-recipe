@@ -4,7 +4,7 @@ from sqlalchemy import text
 
 from db.client import engine
 from db.models import Base
-from routers import account, analyze_ingredients, recipe_image, recipes, settings
+from routers import account, analyze_ingredients, recipe_image, recipes
 
 app = FastAPI(title="Want Cooking API")
 
@@ -17,7 +17,6 @@ app.add_middleware(
 )
 
 app.include_router(recipes.router, prefix="/api")
-app.include_router(settings.router, prefix="/api")
 app.include_router(analyze_ingredients.router, prefix="/api")
 app.include_router(recipe_image.router, prefix="/api")
 app.include_router(account.router, prefix="/api")

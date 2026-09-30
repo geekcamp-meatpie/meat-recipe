@@ -5,9 +5,10 @@
 
 from typing import List
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 
-from services.image_ai_client import IngredientDetection, analyze_image_ai, has_api_key
+from services.ai_credentials import AICredentials, get_gemini_credentials
+from services.image_ai_client import IngredientDetection, analyze_image_ai
 
 router = APIRouter()
 
@@ -20,7 +21,10 @@ ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
 @router.post("/analyze-ingredients", response_model=List[IngredientDetection])
-async def analyze_image(files: List[UploadFile] = File(...)):
+async def analyze_image(
+    files: List[UploadFile] = File(...),
+    creds: AICredentials = Depends(get_gemini_credentials),
+):
     if len(files) > MAX_IMAGES:
         raise HTTPException(status_code=400, detail=f"アップロードできる画像は最大{MAX_IMAGES}枚です。")
 
@@ -30,9 +34,6 @@ async def analyze_image(files: List[UploadFile] = File(...)):
                 status_code=400,
                 detail="アップロードできる画像形式は JPEG / PNG / WebP のみです。",
             )
-
-    if not has_api_key():
-        raise HTTPException(status_code=400, detail="APIキーが設定されていません。設定画面からAPIキーを入力してください。")
 
     images: list[tuple[bytes, str]] = []
     total_bytes = 0
@@ -53,6 +54,6 @@ async def analyze_image(files: List[UploadFile] = File(...)):
         images.append((image_bytes, file.content_type))
 
     try:
-        return await analyze_image_ai(images)
+        return await analyze_image_ai(images, creds.api_key)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"解析中にエラーが発生しました: {str(e)}")

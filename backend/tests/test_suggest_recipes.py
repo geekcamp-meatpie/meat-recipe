@@ -12,7 +12,6 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from config import app_config
 from routers import recipes
 from services import ai_client
 from services.ai_client import AIServiceError
@@ -20,7 +19,10 @@ from services.prompt_builder import build_prompt
 
 app = FastAPI()
 app.include_router(recipes.router, prefix="/api")
-client = TestClient(app)
+# APIキーはサーバーに保存せず、リクエストのヘッダーで受け取る
+KEY_HEADERS = {"X-AI-API-Key": "test-key"}
+client = TestClient(app, headers=KEY_HEADERS)
+no_key_client = TestClient(app)
 
 SAMPLE_RECIPES = [
     {
@@ -35,14 +37,6 @@ SAMPLE_RECIPES = [
         "warnings": [],
     }
 ]
-
-
-@pytest.fixture(autouse=True)
-def reset_config():
-    old = (app_config.api_key, app_config.provider, app_config.medicines)
-    app_config.api_key, app_config.provider, app_config.medicines = "test-key", "gemini", []
-    yield
-    app_config.api_key, app_config.provider, app_config.medicines = old
 
 
 # ---- ルーター ----
@@ -66,17 +60,55 @@ def test_success(monkeypatch):
 
 
 def test_missing_api_key_returns_400(monkeypatch):
-    app_config.api_key = ""
-
     async def fake_call_ai(*args, **kwargs):
         raise AssertionError("APIキー未設定ではAIを呼ばないこと")
 
     monkeypatch.setattr(recipes, "call_ai", fake_call_ai)
 
-    res = client.post("/api/suggest-recipes", json={"ingredients": "卵"})
+    res = no_key_client.post("/api/suggest-recipes", json={"ingredients": "卵"})
 
     assert res.status_code == 400
     assert "APIキー" in res.json()["detail"]
+
+
+def test_provider_header_is_passed_to_ai(monkeypatch):
+    captured = {}
+
+    async def fake_call_ai(prompt, provider, api_key):
+        captured.update(provider=provider, api_key=api_key)
+        return SAMPLE_RECIPES
+
+    monkeypatch.setattr(recipes, "call_ai", fake_call_ai)
+
+    res = no_key_client.post(
+        "/api/suggest-recipes",
+        json={"ingredients": "卵"},
+        headers={"X-AI-API-Key": "claude-key", "X-AI-Provider": "claude"},
+    )
+
+    assert res.status_code == 200
+    assert captured == {"provider": "claude", "api_key": "claude-key"}
+
+
+def test_invalid_provider_returns_400():
+    res = no_key_client.post(
+        "/api/suggest-recipes",
+        json={"ingredients": "卵"},
+        headers={"X-AI-API-Key": "k", "X-AI-Provider": "other"},
+    )
+
+    assert res.status_code == 400
+
+
+def test_api_key_is_not_in_response(monkeypatch):
+    async def failing(*args, **kwargs):
+        raise AIServiceError("boom")
+
+    monkeypatch.setattr(recipes, "call_ai", failing)
+
+    res = client.post("/api/suggest-recipes", json={"ingredients": "卵"})
+
+    assert "test-key" not in res.text
 
 
 def test_ai_failure_returns_502_not_dummy(monkeypatch):
@@ -97,7 +129,6 @@ def test_missing_ingredients_returns_422():
 
 
 def test_medicines_are_passed_to_prompt(monkeypatch):
-    app_config.medicines = ["ワルファリン"]
     captured = {}
 
     async def fake_call_ai(prompt, provider, api_key):
@@ -105,7 +136,7 @@ def test_medicines_are_passed_to_prompt(monkeypatch):
         return []
 
     monkeypatch.setattr(recipes, "call_ai", fake_call_ai)
-    client.post("/api/suggest-recipes", json={"ingredients": "納豆"})
+    client.post("/api/suggest-recipes", json={"ingredients": "納豆", "medicines": ["ワルファリン"]})
 
     assert "ワルファリン" in captured["prompt"]
 

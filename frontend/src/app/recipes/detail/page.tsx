@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import { aiHeaders } from "@/lib/aiSettings";
 import { displayImage, isFavorite, setFavoriteUserImage, toggleFavorite } from "@/lib/favorites";
 import { addHistory } from "@/lib/history";
 import { resizeImageToDataUrl } from "@/lib/image";
@@ -93,7 +94,7 @@ export default function RecipeDetailPage() {
     try {
       const res = await fetch("/api/generate-recipe-image", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+        headers: { "Content-Type": "application/json", ...aiHeaders(), ...(await authHeaders()) },
         body: JSON.stringify({ recipeName: recipe.recipeName, ingredients: recipe.ingredients }),
       });
       if (!res.ok) {

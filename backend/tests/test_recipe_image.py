@@ -12,7 +12,6 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from config import app_config
 from db.client import get_db
 from routers import recipe_image
 from services import auth, recipe_image_client
@@ -25,7 +24,9 @@ app.include_router(recipe_image.router, prefix="/api")
 # 認証とDBは差し替える。DBは中身を触らないダミー、利用回数は image_quota をモックして検証する
 app.dependency_overrides[get_current_user_id] = lambda: USER_ID
 app.dependency_overrides[get_db] = lambda: DB
-client = TestClient(app)
+# APIキーはサーバーに保存せず、リクエストのヘッダーで受け取る
+client = TestClient(app, headers={"X-AI-API-Key": "test-key"})
+no_key_client = TestClient(app)
 
 USER_ID = "11111111-1111-1111-1111-111111111111"
 DB = object()
@@ -36,8 +37,6 @@ IMAGE_BYTES = b"\x89PNG-fake"
 
 @pytest.fixture(autouse=True)
 def reset_config(monkeypatch):
-    old = (app_config.api_key, app_config.provider)
-    app_config.api_key, app_config.provider = "test-key", "gemini"
     # 既定はStorage未設定（data URLフォールバック）。必要なテストだけ上書きする
     monkeypatch.setattr(recipe_image.image_storage, "is_configured", lambda: False)
     # 既定は枠に余裕あり（何枚目かを返す）。上限テストなどで上書きする
@@ -45,7 +44,6 @@ def reset_config(monkeypatch):
     monkeypatch.setattr(recipe_image.image_quota, "release", lambda db, user_id: None)
     app.dependency_overrides[get_db] = lambda: DB
     yield
-    app_config.api_key, app_config.provider = old
 
 
 def _fake_generate(calls=None):
@@ -128,13 +126,14 @@ def test_falls_back_to_data_url_when_upload_fails(monkeypatch):
 
 
 def test_no_api_key_returns_400():
-    app_config.api_key = ""
-    assert client.post("/api/generate-recipe-image", json=BODY).status_code == 400
+    assert no_key_client.post("/api/generate-recipe-image", json=BODY).status_code == 400
 
 
 def test_non_gemini_provider_returns_400():
-    app_config.provider = "claude"
-    assert client.post("/api/generate-recipe-image", json=BODY).status_code == 400
+    res = no_key_client.post(
+        "/api/generate-recipe-image", json=BODY, headers={"X-AI-API-Key": "k", "X-AI-Provider": "claude"}
+    )
+    assert res.status_code == 400
 
 
 def test_ai_error_returns_502(monkeypatch):
@@ -201,8 +200,7 @@ def test_extract_image_raises_when_no_image(resp):
 
 
 def test_prompt_endpoint_returns_prompt_without_api_key():
-    app_config.api_key = ""
-    res = client.post("/api/recipe-image-prompt", json=BODY)
+    res = no_key_client.post("/api/recipe-image-prompt", json=BODY)
     assert res.status_code == 200
     assert res.json() == {"prompt": build_recipe_image_prompt(BODY["recipeName"], BODY["ingredients"])}
 
