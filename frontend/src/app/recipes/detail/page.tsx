@@ -43,13 +43,17 @@ export default function RecipeDetailPage() {
   const { user } = useAuth();
   // 今日あと何枚生成できるか（ログイン中のみ。取得できない間は null）
   const [remaining, setRemaining] = useState<number | null>(null);
+  const [favoriteBusy, setFavoriteBusy] = useState(false);
+  const [favoriteError, setFavoriteError] = useState("");
 
   useEffect(() => {
     const stored = sessionStorage.getItem("selectedRecipe");
     if (stored) {
       const r: Recipe = JSON.parse(stored);
       setRecipe(r);
-      setFavorite(isFavorite(r.recipeName));
+      isFavorite(r.recipeName)
+        .then(setFavorite)
+        .catch(() => {}); // 確認できなくても画面は表示する（お気に入り済みの表示が出ないだけ）
       addHistory(r);
     }
   }, []);
@@ -140,7 +144,8 @@ export default function RecipeDetailPage() {
     try {
       const userImageUrl = await resizeImageToDataUrl(file);
       setRecipe({ ...recipe, userImageUrl });
-      if (!setFavoriteUserImage(recipe.recipeName, userImageUrl)) {
+      // お気に入り済みのときだけ端末に保存する（未追加なら、お気に入りに追加した時点で保存される）
+      if (favorite && !setFavoriteUserImage(recipe.recipeName, userImageUrl)) {
         setImageMessage("写真を保存できませんでした（保存容量の上限）。");
       } else {
         setImageMessage("");
@@ -152,8 +157,20 @@ export default function RecipeDetailPage() {
 
   const removePhoto = () => {
     setRecipe({ ...recipe, userImageUrl: undefined });
-    setFavoriteUserImage(recipe.recipeName, undefined);
+    if (favorite) setFavoriteUserImage(recipe.recipeName, undefined);
     setImageMessage("");
+  };
+
+  const handleToggleFavorite = async () => {
+    setFavoriteError("");
+    setFavoriteBusy(true);
+    try {
+      setFavorite(await toggleFavorite(recipe));
+    } catch (err) {
+      setFavoriteError(err instanceof Error ? err.message : "お気に入りの更新に失敗しました。");
+    } finally {
+      setFavoriteBusy(false);
+    }
   };
 
   const buttonStyle = { border: "1px solid var(--color-accent)", color: "var(--color-accent)" };
@@ -374,12 +391,14 @@ export default function RecipeDetailPage() {
       </div>
 
       <button
-        className="w-full rounded-xl p-3 font-bold text-white transition"
+        className="w-full rounded-xl p-3 font-bold text-white transition disabled:opacity-60"
         style={{ background: favorite ? "#e11d48" : "var(--color-accent)" }}
-        onClick={() => setFavorite(toggleFavorite(recipe))}
+        onClick={handleToggleFavorite}
+        disabled={favoriteBusy}
       >
         {favorite ? "♥ お気に入り済み（タップで解除）" : "♡ お気に入りに追加"}
       </button>
+      {favoriteError && <p className="text-xs text-red-600">{favoriteError}</p>}
 
       <button
         className="w-full rounded-xl p-3 font-bold transition"

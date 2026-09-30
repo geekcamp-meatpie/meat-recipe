@@ -127,8 +127,8 @@ export default function SettingsPage() {
               <div className="rounded-xl p-3 space-y-2" style={{ background: "#fff5f5", border: "1px solid #fecaca" }}>
                 <p className="text-xs font-bold text-red-700">本当に退会しますか？</p>
                 <p className="text-[11px] text-red-600">
-                  アカウントと、サーバーに保存されたあなたの情報（画像生成の利用回数など）を削除します。この操作は取り消せません。
-                  この端末のお気に入り・履歴は残ります。
+                  アカウントと、サーバーに保存されたあなたの情報（お気に入りのレシピ、画像生成の利用回数など）を削除します。
+                  この操作は取り消せません。この端末に保存された履歴・写真は残ります。
                 </p>
                 {withdrawError && <p className="text-xs text-red-600">{withdrawError}</p>}
                 <div className="flex gap-2">
