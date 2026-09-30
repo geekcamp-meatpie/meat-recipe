@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
+import { supabase } from "@/lib/supabase";
 
 export default function SettingsPage() {
   const [apiKey, setApiKey] = useState("");
@@ -11,6 +13,32 @@ export default function SettingsPage() {
   const [newMedicine, setNewMedicine] = useState("");
   const { user, loading: authLoading, available, signInWithGoogle, signOut } = useAuth();
   const [authError, setAuthError] = useState("");
+  // 退会: idle → confirm（確認中）→ deleting（処理中）
+  const [withdrawStep, setWithdrawStep] = useState<"idle" | "confirm" | "deleting">("idle");
+  const [withdrawError, setWithdrawError] = useState("");
+  const [withdrawn, setWithdrawn] = useState(false);
+
+  const handleWithdraw = async () => {
+    setWithdrawStep("deleting");
+    setWithdrawError("");
+    try {
+      const { data } = (await supabase?.auth.getSession()) ?? { data: null };
+      const token = data?.session?.access_token;
+      if (!token) throw new Error("ログインの有効期限が切れています。再度ログインしてください。");
+      const res = await fetch("/api/account", { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.detail || "退会処理に失敗しました。");
+      }
+      // アカウントはすでに削除済みなので、サーバーへのログアウト通知はせず、この端末のログイン状態だけ消す
+      await supabase?.auth.signOut({ scope: "local" });
+      setWithdrawStep("idle");
+      setWithdrawn(true);
+    } catch (err) {
+      setWithdrawError(err instanceof Error ? err.message : "退会処理に失敗しました。");
+      setWithdrawStep("confirm");
+    }
+  };
 
   const handleSignIn = async () => {
     setAuthError("");
@@ -86,6 +114,46 @@ export default function SettingsPage() {
             >
               ログアウト
             </button>
+
+            {withdrawStep === "idle" ? (
+              <button
+                className="w-full text-[11px] underline"
+                style={{ color: "var(--color-text-muted)" }}
+                onClick={() => setWithdrawStep("confirm")}
+              >
+                退会する
+              </button>
+            ) : (
+              <div className="rounded-xl p-3 space-y-2" style={{ background: "#fff5f5", border: "1px solid #fecaca" }}>
+                <p className="text-xs font-bold text-red-700">本当に退会しますか？</p>
+                <p className="text-[11px] text-red-600">
+                  アカウントと、サーバーに保存されたあなたの情報（画像生成の利用回数など）を削除します。この操作は取り消せません。
+                  この端末のお気に入り・履歴は残ります。
+                </p>
+                {withdrawError && <p className="text-xs text-red-600">{withdrawError}</p>}
+                <div className="flex gap-2">
+                  <button
+                    className="flex-1 rounded-xl p-2 text-xs font-bold text-white disabled:opacity-50"
+                    style={{ background: "#e11d48" }}
+                    onClick={handleWithdraw}
+                    disabled={withdrawStep === "deleting"}
+                  >
+                    {withdrawStep === "deleting" ? "退会処理中..." : "退会する"}
+                  </button>
+                  <button
+                    className="flex-1 rounded-xl p-2 text-xs font-bold bg-white"
+                    style={{ border: "1px solid var(--color-border)" }}
+                    onClick={() => {
+                      setWithdrawStep("idle");
+                      setWithdrawError("");
+                    }}
+                    disabled={withdrawStep === "deleting"}
+                  >
+                    キャンセル
+                  </button>
+                </div>
+              </div>
+            )}
           </>
         ) : (
           <>
@@ -99,6 +167,14 @@ export default function SettingsPage() {
             >
               Googleでログイン
             </button>
+            <p className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>
+              ログインすると、
+              <Link href="/privacy" className="underline">
+                プライバシーポリシー
+              </Link>
+              に同意したものとみなされます。
+            </p>
+            {withdrawn && <p className="text-xs font-semibold">退会しました。ご利用ありがとうございました。</p>}
             {authError && <p className="text-xs text-red-600">{authError}</p>}
           </>
         )}
@@ -210,6 +286,12 @@ export default function SettingsPage() {
       >
         {saved ? "✓ 保存しました" : "設定を保存"}
       </button>
+
+      <p className="text-center text-[11px]">
+        <Link href="/privacy" className="underline" style={{ color: "var(--color-text-muted)" }}>
+          プライバシーポリシー
+        </Link>
+      </p>
     </div>
   );
 }
