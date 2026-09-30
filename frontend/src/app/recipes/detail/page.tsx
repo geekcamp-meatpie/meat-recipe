@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { isFavorite, toggleFavorite } from "@/lib/favorites";
+import { addHistory } from "@/lib/history";
 
 interface Recipe {
   recipeName: string;
@@ -25,6 +26,7 @@ export default function RecipeDetailPage() {
       const r: Recipe = JSON.parse(stored);
       setRecipe(r);
       setFavorite(isFavorite(r.recipeName));
+      addHistory(r);
     }
   }, []);
 
