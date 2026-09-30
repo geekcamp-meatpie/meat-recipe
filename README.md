@@ -77,7 +77,7 @@ npm run dev
 
 環境変数は起動時に読み込まれるため、変更したら `npm run dev` を再起動する。
 
-フロントからのAPI呼び出しはすべて `/api/...` で行い、`next.config.ts` の rewrites でバックエンド（`http://127.0.0.1:8000`）へ中継している。バックエンドのポートを変える場合は `next.config.ts` を直す。
+フロントからのAPI呼び出しはすべて `/api/...` で行い、`next.config.ts` の rewrites でバックエンド（`http://127.0.0.1:8000`）へ中継している。中継先は環境変数 `BACKEND_URL`（未設定なら `http://127.0.0.1:8000`）で指定する。バックエンドのポートを変える場合は `frontend/.env.local` に `BACKEND_URL` を書く。
 
 ### 3. Supabase側の設定（ログイン・お気に入りを使う場合）
 
@@ -93,6 +93,38 @@ npm run dev
 cd backend && python -m pytest -q     # DBには接続しない（tests/conftest.py で DATABASE_URL を空にする）
 cd frontend && npm run lint
 ```
+
+---
+
+## デプロイ（公開）
+
+フロントを Vercel、バックエンドを Render に置く構成を想定している（**まだ実施していない。手順の目安**）。Vercel は Next.js、Render は常時動くPythonサーバーが得意なため、役割を分ける。
+
+### 1. バックエンド（Render）
+
+1. Render で New → Web Service を選び、このリポジトリを連携する
+2. 設定: Root Directory `backend` / Build Command `pip install -r requirements.txt` / Start Command `uvicorn main:app --host 0.0.0.0 --port $PORT`
+3. 環境変数 `PYTHON_VERSION` に 3.13 系を指定する（3.14はビルドに失敗する）
+4. 環境変数に `SUPABASE_URL` / `SUPABASE_API`（service_role キー）/ `DATABASE_URL` / `SUPABASE_IMAGE_BUCKET` / `IMAGE_DAILY_LIMIT` を設定する。Geminiのキーは不要（ユーザーが自分のキーを入力する）
+5. `DATABASE_URL` は、Supabaseの **Session pooler** の接続文字列を使う（Renderの無料枠はIPv4のみで、Supabaseの直接接続はIPv6のため）
+6. 発行された `https://xxxx.onrender.com` を控える
+
+### 2. フロントエンド（Vercel）
+
+1. Vercel で Add New → Project を選び、このリポジトリを連携する。Root Directory は `frontend`
+2. 環境変数に `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `BACKEND_URL`（手順1のRenderのURL）を設定する
+3. Deploy して `https://xxxx.vercel.app` を控える
+
+### 3. ログインの設定
+
+- Supabase の Authentication → URL Configuration の Site URL と Redirect URLs に、`https://xxxx.vercel.app/auth/callback` を追加する
+- Google Cloud の OAuth 同意画面を「公開」にする（テストユーザー以外もログインできるようにする）。Google側のリダイレクトURIはSupabaseのURLのままで変更不要
+
+### 注意
+
+- Renderの無料枠は、15分アクセスが無いと停止し、次のアクセスで起動に約1分かかる（有料プランで回避できる）
+- Vercelの無料枠（Hobby）は非商用のみ。組織のリポジトリを連携できるかは事前に確認する
+- 食材認識は最大5MB×3枚の画像を `/api` 経由で送る。VercelのURL経由でアップロードできるか（リクエストサイズの制限）は、デプロイ後に写真で確認する
 
 ---
 
@@ -217,7 +249,7 @@ meat-recipe/
 
 - 検索画面（`/search`）
 - 履歴が端末内（localStorage）のみで、端末をまたいで同期されない
-- デプロイ方法（`next.config.ts` のバックエンドURL `127.0.0.1:8000` とバックエンドのCORS許可 `localhost:3000` / LAN内IPは開発用の値）
+- デプロイの実施（手順は「デプロイ（公開）」参照。実施後は、バックエンドのCORS許可が `localhost:3000` / LAN内IPのみである点も確認する。現在の構成ではブラウザは同じドメインの `/api` を呼ぶため、CORSは効かない）
 - Capacitor.jsによるスマホアプリ化
 - フロントの自動テスト（Lintのみ）
 
