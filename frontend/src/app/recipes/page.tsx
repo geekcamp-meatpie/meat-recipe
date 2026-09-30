@@ -2,6 +2,7 @@
 
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
+import RecipeCard from "@/components/RecipeCard";
 
 interface Recipe {
   recipeName: string;
@@ -22,6 +23,9 @@ function RecipesContent() {
   const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
+    // 条件変更・再試行・画面遷移で古い取得結果が反映されないようにする
+    let cancelled = false;
+
     const fetchRecipes = async () => {
       setLoading(true);
       setError("");
@@ -49,6 +53,7 @@ function RecipesContent() {
         }
 
         const data = await res.json();
+        if (cancelled) return;
         setRecipes(data.recipes);
       } catch (err) {
         setError(err instanceof Error ? err.message : "エラーが発生しました");
@@ -57,6 +62,9 @@ function RecipesContent() {
       }
     };
     fetchRecipes();
+    return () => {
+      cancelled = true;
+    };
   }, [searchParams, retryCount]);
 
   if (loading) {
@@ -100,34 +108,16 @@ function RecipesContent() {
         ※ AIが提案したレシピです。分量や手順は目安としてご利用ください。
       </p>
 
-      <div className="space-y-2.5">
-        {recipes.map((recipe, i) => (
-          <button
-            key={i}
-            className="w-full text-left flex items-center gap-3.5 rounded-2xl p-3.5 transition hover:shadow-md"
-            style={{
-              background: "var(--color-card)",
-              boxShadow: "0 1px 6px rgba(0,0,0,0.06)",
-            }}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {recipes.map((recipe) => (
+          <RecipeCard
+            key={recipe.recipeName}
+            recipe={recipe}
             onClick={() => {
               sessionStorage.setItem("selectedRecipe", JSON.stringify(recipe));
               router.push("/recipes/detail");
             }}
-          >
-            <div
-              className="w-[52px] h-[52px] rounded-xl flex items-center justify-center text-[26px] shrink-0"
-              style={{ background: "var(--color-hero-start)" }}
-            >
-              🍽️
-            </div>
-            <div className="flex-1">
-              <h3 className="text-sm font-bold mb-1">{recipe.recipeName}</h3>
-              <p className="text-[11px]" style={{ color: "var(--color-text-muted)" }}>
-                調理時間: {recipe.cookingTime}分 ・ {recipe.difficulty}
-              </p>
-            </div>
-            <span style={{ color: "#ccc" }}>›</span>
-          </button>
+          />
         ))}
       </div>
     </div>

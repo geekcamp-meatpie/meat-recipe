@@ -1,39 +1,55 @@
 "use client";
 import { useEffect, useState } from "react";
 import FavoriteCard from "@/components/FavoriteCard";
+import { useAuth } from "@/components/AuthProvider";
 import { getFavorites, toggleFavorite, type FavoriteRecipe } from "@/lib/favorites";
 
 export default function FavoritesPage() {
-  // [修正理由] 元は axios で /api/favorites/list を取得する想定だったが、
-  //  - getFavoritesList が「useEffect を呼ぶ関数」になっており、フックの呼び出しルール違反
-  //    （レンダーのたびに別の関数が作られ、useEffect も実際には実行されない）
-  //  - useEffect 内の async 関数が定義されるだけで呼ばれておらず、取得結果も state に入らない
-  //  - FavoriteCard に「関数そのもの」を data として渡しており、中身のデータになっていなかった
-  //  - バックエンドに /api/favorites/list が存在しない
-  // そのため、お気に入りは lib/favorites.ts 経由でブラウザの localStorage から読み、
-  // useState で保持して画面に反映する形にした。
+  // お気に入りの保存先は、ログイン中はサーバー（Supabase）、未ログインはこの端末の localStorage。
+  // 保存先が変わるので、ログイン状態が確定・変化したときに読み直す。
+  const { user, loading: authLoading } = useAuth();
   const [favorites, setFavorites] = useState<FavoriteRecipe[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  // localStorage はブラウザでしか使えないため、SSR とのずれを避けて
-  // マウント後（useEffect）に読み込む
+  const load = async () => {
+    setError("");
+    try {
+      setFavorites(await getFavorites());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "お気に入りを読み込めませんでした。");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    setFavorites(getFavorites());
-  }, []);
+    if (authLoading) return;
+    setLoading(true);
+    load();
+    // user の切り替え（ログイン・ログアウト）で読み直す
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, user?.id]);
 
-  // ♡ボタンで解除 → localStorage を更新し、一覧の state も再読込して即座に消す
-  const handleRemove = (recipe: FavoriteRecipe) => {
-    toggleFavorite(recipe);
-    setFavorites(getFavorites());
+  // ♡ボタンで解除 → 保存先を更新し、一覧も読み直して即座に消す
+  const handleRemove = async (recipe: FavoriteRecipe) => {
+    try {
+      await toggleFavorite(recipe);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "お気に入りを解除できませんでした。");
+    }
   };
 
   return (
     <div className="px-5 pt-6">
       <h1 className="text-3xl font-bold text-center mb-8">♡お気に入りレシピ♡</h1>
-      {/* [修正理由] 元は FavoriteCard を10個べた書きし、かつ「お気に入りに保存したレシピが
-          ここに表示されます」の案内文も常に表示されていた（空の grid も残っていた）。
-          実データの件数分 map で描画し、0件のときだけ案内文を出すようにした。
-          key はレシピ名（お気に入りの重複判定も recipeName で行っているため） */}
-      {favorites.length === 0 ? (
+      {error && <p className="text-sm text-center text-red-600 mb-4">{error}</p>}
+      {loading ? (
+        <p className="text-sm text-center" style={{ color: "var(--color-text-muted)" }}>
+          読み込み中...
+        </p>
+      ) : favorites.length === 0 ? (
         <p className="text-sm text-center" style={{ color: "var(--color-text-muted)" }}>
           お気に入りに保存したレシピがここに表示されます。
         </p>
@@ -43,6 +59,11 @@ export default function FavoritesPage() {
             <FavoriteCard key={recipe.recipeName} recipe={recipe} onRemove={() => handleRemove(recipe)} />
           ))}
         </div>
+      )}
+      {!authLoading && !user && (
+        <p className="mt-6 text-[11px] text-center" style={{ color: "var(--color-text-muted)" }}>
+          ログインすると、お気に入りを別の端末とも共有できます（設定画面からログインできます）。
+        </p>
       )}
     </div>
   );

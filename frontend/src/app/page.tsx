@@ -11,11 +11,13 @@ const ingredientData: Record<string, string[]> = {
 };
 import { useRouter } from "next/navigation";
 
+const MAX_IMAGES = 3;
+
 export default function HomePage() {
   const router = useRouter();
   const [ingredientText, setIngredientText] = useState("");
   const [showTextInput, setShowTextInput] = useState(false);
-  const [image, setImage] = useState<File | null>(null);
+  const [images, setImages] = useState<File[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [imageError, setImageError] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
@@ -39,10 +41,25 @@ export default function HomePage() {
 
     router.push(`/confirm?${params.toString()}`);
   };
-  const handleFileslect = (e: React.ChangeEvent<HTMLInputElement>) => {setImage(e.target.files?.[0] || null);};
+  const handleFileslect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files ?? []);
+    e.target.value = ""; // 同じファイルを選び直しても onChange が発火するようにする
+    if (picked.length === 0) return;
+    const merged = [...images, ...picked];
+    if (merged.length > MAX_IMAGES) {
+      setImageError(`写真は最大${MAX_IMAGES}枚までです。`);
+    } else {
+      setImageError("");
+    }
+    setImages(merged.slice(0, MAX_IMAGES));
+  };
+  const removeImage = (index: number) => {
+    setImages(images.filter((_, i) => i !== index));
+    setImageError("");
+  };
   const handleSubmitImage = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
-    if (!image) {
+    if (images.length === 0) {
       setImageError("先に写真を選択または撮影してください。");
       return;
     }
@@ -50,7 +67,7 @@ export default function HomePage() {
     setAnalyzing(true);
     try {
       const formData = new FormData();
-      formData.append("files", image);
+      images.forEach((file) => formData.append("files", file));
       const res = await fetch("/api/analyze-ingredients", {
         method: "POST",
         body: formData,
@@ -147,6 +164,7 @@ export default function HomePage() {
                   className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                   type="file"
                   accept="image/*"
+                  multiple
                   onChange={handleFileslect}
                 />
               </div>
@@ -162,10 +180,29 @@ export default function HomePage() {
             </button>
           </div>
 
-          {image && (
-            <p className="text-xs" style={{ color: "var(--color-text-sub)" }}>
-              選択中: {image.name}
-            </p>
+          {images.length > 0 && (
+            <div className="flex w-full flex-col gap-1">
+              <p className="text-xs" style={{ color: "var(--color-text-sub)" }}>
+                選択中（{images.length}/{MAX_IMAGES}枚）
+              </p>
+              {images.map((file, i) => (
+                <div
+                  key={`${file.name}-${i}`}
+                  className="flex items-center justify-between gap-2 text-xs"
+                  style={{ color: "var(--color-text-sub)" }}
+                >
+                  <span className="truncate">{file.name}</span>
+                  <button
+                    type="button"
+                    className="shrink-0 font-bold"
+                    onClick={() => removeImage(i)}
+                    aria-label={`${file.name}を削除`}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
           {imageError && <p className="text-xs text-red-600">{imageError}</p>}
 

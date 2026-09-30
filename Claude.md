@@ -50,6 +50,7 @@ page.tsx(ホーム/食材入力)
 | `routers/recipes.py` | `POST /api/suggest-recipes` | 実装済みだが `services/ai_client.py` がダミーレシピ固定を返すスタブのまま（Issue #3未着手） |
 | `routers/settings.py` | `GET/POST /api/settings` | 実装済み。APIキー・provider・薬リストをDB永続化 |
 | `routers/analyze_ingredients.py` | `POST /api/analyze-ingredients` | 実装済み（Gemini構造化出力で画像から食材抽出）。マルチパートの `files` フィールドで最大5枚（1枚5MB・合計20MBまで、JPEG/PNG/WebPのみ）を受け付け、超過は400/413を返す。複数枚は1回のGeminiリクエストにまとめ、別角度の同一食材は重複させない。フロント側の呼び出しコードは未実装（Issue #18の写真撮影機能が繋がっていない） |
+| `routers/recipe_image.py` | `POST /api/generate-recipe-image` | 実装済み。レシピ名・材料から料理イメージ画像をGeminiで1枚生成し、Supabase Storage（公開バケット `SUPABASE_IMAGE_BUCKET`、既定 `recipe-images`）に保存して `imageUrl` を返す。同じレシピ名は保存済み画像を再利用（再生成しない）。Storage未設定・保存失敗時はdata URLを返す。providerがgeminiのときのみ。フロントは `/api/suggest-recipes` の後、レシピごとに並列で呼び、届いた順にカードへ反映する（2段階方式） |
 
 `main.py` にルーターをinclude router名で登録する構成のため、**ルーターファイル名とimport/include_router呼び出しの名前を必ず一致させること**（過去に `routers/ingredients.py` を削除して `analyze_ingredients.py` に差し替えた際、mainの参照更新漏れでサーバーが起動不能になった実例あり）。
 

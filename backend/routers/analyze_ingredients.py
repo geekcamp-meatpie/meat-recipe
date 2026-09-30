@@ -13,9 +13,9 @@ router = APIRouter()
 
 # 1方向の写真では全食材が映らないことがあるため複数枚を許可するが、
 # Geminiの無料枠・リクエスト上限（約20MB）を考慮して枚数とサイズに上限を設ける。
-MAX_IMAGES = 5
+MAX_IMAGES = 3
 MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 1枚あたり5MB
-MAX_TOTAL_BYTES = 20 * 1024 * 1024  # 合計20MB（5枚×5MB=25MBだとGeminiのリクエスト上限を超えるため）
+MAX_TOTAL_BYTES = 20 * 1024 * 1024  # 合計20MB（3枚×5MB=15MB）
 ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 

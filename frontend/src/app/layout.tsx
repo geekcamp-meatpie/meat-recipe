@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { AuthProvider } from "@/components/AuthProvider";
 import BottomNav from "@/components/BottomNav";
 import TopBar from "@/components/TopBar";
 
@@ -31,9 +32,11 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
-        <TopBar />
-        <main className="flex-1 overflow-y-auto pb-20">{children}</main>
-        <BottomNav />
+        <AuthProvider>
+          <TopBar />
+          <main className="flex-1 overflow-y-auto pb-20">{children}</main>
+          <BottomNav />
+        </AuthProvider>
       </body>
     </html>
   );

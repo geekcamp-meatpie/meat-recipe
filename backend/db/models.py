@@ -1,4 +1,5 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, Date, ForeignKey, Integer, String, Text
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -48,3 +49,18 @@ class AppSettings(Base):
     api_key = Column(String, nullable=False, default="")
     provider = Column(String, nullable=False, default="gemini")
     medicines = Column(Text, nullable=False, default="[]")  # JSON文字列としてリストを保持
+
+
+class ImageUsage(Base):
+    """画像生成の利用回数（ユーザー×日本時間の日付ごと）。1日の上限チェックに使う。
+
+    user_id は Supabase Auth のユーザーID（auth.users.id）。
+    Supabaseの public スキーマはAPI経由で公開されるため、起動時に RLS を有効化して
+    フロント（anonキー）からは読み書きできないようにしている（main.py）。書き込みはバックエンドのみ。
+    """
+
+    __tablename__ = "image_usage"
+
+    user_id = Column(UUID(as_uuid=False), primary_key=True)
+    usage_date = Column(Date, primary_key=True)
+    count = Column(Integer, nullable=False, default=0)
